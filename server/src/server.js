@@ -227,6 +227,7 @@ app.post("/api/admin/users/:id/grant",adminAuth,async(req,res)=>{const until=req
 app.post("/api/admin/users/:id/revoke",adminAuth,async(req,res)=>{await pool.query("UPDATE users SET plan='free',grant_until=NULL WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.get("/api/admin/alerts",adminAuth,async(req,res)=>{const [rows]=await pool.query("SELECT a.*,u.email,u.whatsapp_number,u.plan FROM job_alerts a JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 500");res.json({alerts:rows})});
 
+const attachWhatsAppBot=()=>{whatsapp.on("message",async msg=>{try{if(!msg?.body||msg.fromMe||msg.from==="status@broadcast"||msg.isGroupMsg)return;const answer=await websiteAnswer(msg.body);await msg.reply(answer)}catch(e){console.error("WhatsApp bot reply:",e.message)}})};
 const websiteAnswer=async question=>{
  const q=String(question||"").toLowerCase();
  if(/plan|pricing|price|subscription|pro/.test(q))return "Talent Inspirations has a free job-search experience and a Pro subscription for personalized job alerts and WhatsApp delivery. Admin-granted users can receive free access for a period chosen by the admin.";
@@ -245,4 +246,5 @@ const seed=async()=>{
  }
 };
 await seed();
+attachWhatsAppBot();
 app.listen(PORT,async()=>{console.log(`Talent Inspirations API listening on ${PORT}`);whatsapp.start().catch(e=>console.error("WhatsApp Web startup:",e.message));scanAll();setInterval(scanAll,5*60*1000)});
