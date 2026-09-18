@@ -4,6 +4,7 @@ import cors from "cors";
 import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import {syncSource} from "./sync.js";
 import { URL } from "node:url";
 
 const app=express();
@@ -34,6 +35,8 @@ app.get("/api/admin/sources",auth,async(req,res)=>{const [rows]=await pool.query
 app.post("/api/admin/sources",auth,async(req,res)=>{try{const {companyName,careerUrl}=req.body||{};const url=normalizeCareerUrl(careerUrl);if(!companyName)return res.status(400).json({error:"Company name required"});const [c]=await pool.query("INSERT INTO companies(name,career_url) VALUES(?,?)",[companyName,url]);await pool.query("INSERT INTO job_sources(company_id,source_url) VALUES(?,?)",[c.insertId,url]);res.status(201).json({message:"USA career source added",companyId:c.insertId})}catch(e){res.status(400).json({error:e.message})}});
 
 app.post("/api/admin/jobs",auth,async(req,res)=>{const {companyId,title,description,location,applyUrl,postedAt,locationType="unknown"}=req.body||{};if(!companyId||!title||!description||!location||!applyUrl)return res.status(400).json({error:"companyId, title, description, location and applyUrl are required"});if(!isUSJob(location,description))return res.status(422).json({error:"Only USA jobs can be published"});const posted=parseDate(postedAt);const expires=new Date(posted.getTime()+30*24*60*60*1000);if(expires<=new Date())return res.status(422).json({error:"Job is older than 30 days"});const exp=classifyExperience(description);const cat=category(`${title} ${description}`);const skills=extractSkills(description);const [r]=await pool.query("INSERT INTO jobs(company_id,source_url,title,description,location,country,location_type,experience_level,category,apply_url,posted_at,expires_at) VALUES(?,?,?,?,?,'United States',?,?,?,?,?,?)",[companyId,applyUrl,title,description,location,locationType,exp,cat,applyUrl,posted,expires]);for(const skill of skills)await pool.query("INSERT IGNORE INTO job_skills(job_id,skill_name) VALUES(?,?)",[r.insertId,skill]);res.status(201).json({id:r.insertId,experienceLevel:exp,category:cat,skills})});
+
+app.post("/api/admin/sources/:id/sync",auth,async(req,res)=>{try{res.json(await syncSource(pool,req.params.id))}catch(e){res.status(400).json({error:e.message})}});
 
 app.delete("/api/admin/sources/:id",auth,async(req,res)=>{await pool.query("DELETE FROM job_sources WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.post("/api/admin/cleanup",auth,async(req,res)=>{const [r]=await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<NOW() OR country<>'United States'");res.json({deactivated:r.affectedRows})});
