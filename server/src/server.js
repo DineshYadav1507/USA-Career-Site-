@@ -47,6 +47,32 @@ app.post("/api/admin/sources",auth,async(req,res)=>{try{const {companyName,caree
 
 app.post("/api/admin/jobs",auth,async(req,res)=>{const {companyId,title,description,location,applyUrl,postedAt,locationType="unknown"}=req.body||{};if(!companyId||!title||!description||!location||!applyUrl)return res.status(400).json({error:"companyId, title, description, location and applyUrl are required"});if(!isUSJob(location,description))return res.status(422).json({error:"Only USA jobs can be published"});const posted=parseDate(postedAt);const expires=new Date(posted.getTime()+30*24*60*60*1000);if(expires<=new Date())return res.status(422).json({error:"Job is older than 30 days"});const exp=classifyExperience(description);const cat=category(`${title} ${description}`);const skills=extractSkills(description);const [r]=await pool.query("INSERT INTO jobs(company_id,source_url,title,description,location,country,location_type,experience_level,category,apply_url,posted_at,expires_at) VALUES(?,?,?,?,?,'United States',?,?,?,?,?,?)",[companyId,applyUrl,title,description,location,locationType,exp,cat,applyUrl,posted,expires]);for(const skill of skills)await pool.query("INSERT IGNORE INTO job_skills(job_id,skill_name) VALUES(?,?)",[r.insertId,skill]);res.status(201).json({id:r.insertId,experienceLevel:exp,category:cat,skills})});
 
+app.post("/api/admin/jobs",auth,async(req,res)=>{
+ try{
+  const {companyId,companyName,careerUrl="",title,description,location,locationType="unknown",experienceLevel="other",category="Software Engineering",employmentType="",skills=[],applyUrl,postedAt}=req.body||{};
+  if(!title||!description||!location||!applyUrl)return res.status(400).json({error:"Title, description, location and apply link are required"});
+  const usStates=["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
+  const s=`${location} ${description}`;
+  if(/\\b(india|canada|united kingdom|uk|germany|australia|singapore|ireland|france|spain|netherlands|brazil)\\b/i.test(s)||(!/\\b(united states|usa|u\\.?s\\.?)\\b/i.test(location)&&!usStates.some(x=>new RegExp(`\\\\b${x}\\\\b`,"i").test(location))))return res.status(422).json({error:"Only USA jobs can be added"});
+  let cid=companyId;
+  if(!cid){
+   if(!companyName)return res.status(400).json({error:"Select a company or enter a company name"});
+   const [existing]=await pool.query("SELECT id FROM companies WHERE name=? LIMIT 1",[companyName]);
+   if(existing[0])cid=existing[0].id;
+   else{const [ins]=await pool.query("INSERT INTO companies(name,career_url,industry) VALUES(?,?,?)",[companyName,careerUrl||applyUrl,"Other"]);cid=ins.insertId}
+  }
+  const posted=postedAt?new Date(postedAt):new Date();
+  if(Number.isNaN(posted.getTime()))return res.status(400).json({error:"Invalid published date"});
+  const expires=new Date(posted.getTime()+30*86400000);
+  if(expires<=new Date())return res.status(422).json({error:"Published date is older than 30 days"});
+  const cleanSkills=Array.isArray(skills)?[...new Set(skills.map(x=>String(x).trim()).filter(Boolean))]:[];
+  const externalId=`manual:${Date.now()}:${Math.random().toString(36).slice(2,8)}`;
+  const [r]=await pool.query("INSERT INTO jobs(company_id,source_url,external_job_id,title,description,location,country,location_type,experience_level,category,employment_type,apply_url,source_job_url,posted_at,expires_at,is_active) VALUES(?,?,?,?,?,'United States',?,?,?,?,?,?,?,?,?,1)",[cid,careerUrl||applyUrl,externalId,title,description,location,locationType,experienceLevel,category,employmentType||null,applyUrl,applyUrl,posted,expires]);
+  for(const skill of cleanSkills)await pool.query("INSERT IGNORE INTO job_skills(job_id,skill_name) VALUES(?,?)",[r.insertId,skill]);
+  res.status(201).json({id:r.insertId,message:"Manual USA job added",skills:cleanSkills});
+}catch(e){res.status(400).json({error:e.message})}
+});
+
 app.post("/api/admin/sources/:id/sync",auth,async(req,res)=>{try{res.json(await syncSource(pool,req.params.id))}catch(e){res.status(400).json({error:e.message})}});
 
 app.delete("/api/admin/sources/:id",auth,async(req,res)=>{await pool.query("DELETE FROM job_sources WHERE id=?",[req.params.id]);res.json({ok:true})});
