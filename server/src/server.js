@@ -166,7 +166,7 @@ app.get("/api/jobs",async(req,res)=>{
  try{
   const days=[3,7,15,30].includes(Number(req.query.days))?Number(req.query.days):30;
   const p=[];const where=[`j.is_active=1`,"j.country='United States'","j.expires_at>NOW()",`COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL ${days} DAY)`];
-  if(req.query.q){const t="%"+String(req.query.q).trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR LOWER(j.category) LIKE ?)");p.push(t,t,t,t,t)}
+  if(req.query.q){const t="%"+String(req.query.q).trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR LOWER(j.category) LIKE ? OR LOWER(CAST(j.skills_json AS CHAR)) LIKE ?)");p.push(t,t,t,t,t,t)}
   if(req.query.category){where.push("j.category=?");p.push(req.query.category)}
   if(req.query.industry){where.push("c.industry=?");p.push(req.query.industry)}
   if(req.query.level){where.push("j.experience_level=?");p.push(req.query.level)}
