@@ -14,7 +14,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
+      - name: Install client
+        run: npm --prefix client install
+      - name: Lint client
+        run: npm --prefix client run lint
+      - name: Build client
+        run: npm --prefix client run build
+      - name: Install server
+        run: npm --prefix server install
+      - name: Check server syntax
+        run: node --check server/src/server.js && node --check server/src/sync.js && node --check server/src/jobSources.js
