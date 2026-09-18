@@ -21,4 +21,4 @@ jobs:
       - name: Install server
         run: npm --prefix server install
       - name: Check rebuilt server
-        run: node --check server/src/server.js && node --check server/src/careerAgent.js && node --check server/src/whatsapp.js && node --check server/src/billing.js
+        run: node --check server/src/server.js && node --check server/src/careerAgent.js && node --check server/src/whatsappWeb.js && node --check server/src/billing.js
