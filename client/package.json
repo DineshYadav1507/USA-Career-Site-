@@ -1,0 +1,6 @@
+{
+  "name":"talent-inspirations-client","private":true,"version":"1.0.0","type":"module",
+  "scripts":{"dev":"vite","build":"vite build","lint":"eslint ."},
+  "dependencies":{"@vitejs/plugin-react":"^4.3.4","vite":"^6.0.7","react":"^19.0.0","react-dom":"^19.0.0","react-router-dom":"^7.1.1","lucide-react":"^0.468.0","tailwindcss":"^4.0.0"},
+  "devDependencies":{"eslint":"^9.17.0","@eslint/js":"^9.17.0","eslint-plugin-react-hooks":"^5.1.0","eslint-plugin-react-refresh":"^0.4.16"}
+}
