@@ -2,7 +2,16 @@ import * as cheerio from "cheerio";
 import { URL } from "node:url";
 const usStates=["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
 const nonUs=/\b(india|canada|united kingdom|uk|germany|australia|singapore|ireland|france|spain|netherlands|brazil)\b/i;
-export function isUSA(location="",description=""){const loc=String(location||"");const desc=String(description||"");if(nonUs.test(loc))return false;if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(loc))return false;if(/\b(united states|usa|u\.?s\.?)\b/i.test(loc)||usStates.some(x=>new RegExp(`\\b${x}\\b`,"i").test(loc)))return true;if(/remote/i.test(loc))return /\b(united states|usa|u\.?s\.?)\b/i.test(desc)&&!nonUs.test(desc);return false;}\nfunction absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
+export function isUSA(location="",description=""){
+ const loc=String(location||"");
+ const desc=String(description||"");
+ if(nonUs.test(loc))return false;
+ if(/remote\\s*[-–—:]?\\s*(worldwide|global|anywhere)/i.test(loc))return false;
+ if(/\\b(united states|usa|u\\.?s\\.?)\\b/i.test(loc))return true;
+ if(usStates.some(state=>loc.toLowerCase().includes(state.toLowerCase())))return true;
+ if(/remote/i.test(loc))return /\\b(united states|usa|u\\.?s\\.?)\\b/i.test(desc)&&!nonUs.test(desc);
+ return false;
+}\nfunction absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
 function parseExperience(t){if(/\b(intern|internship|new grad|entry[- ]level|fresher|graduate)\b|\b0\s*[-–to]?\s*1\s*years?\b/i.test(t))return"fresher";if(/\b(senior|lead|principal|manager|\d+\+?\s*years?)\b/i.test(t))return"experienced";return"other"}
 function parseCategory(t){const s=t.toLowerCase();if(/devops|sre|kubernetes|terraform|cloud engineer/.test(s))return"DevOps";if(/data analyst|data scientist|analytics|business intelligence/.test(s))return"Data";if(/cyber|security engineer|infosec/.test(s))return"Cybersecurity";if(/qa|quality assurance|test engineer/.test(s))return"QA";if(/machine learning|ai engineer|ml engineer/.test(s))return"AI/ML";return"Software Engineering"}
 const skillCatalog=["Java","Spring Boot","JavaScript","TypeScript","React","Angular","Python","SQL","MySQL","PostgreSQL","MongoDB","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Jenkins","GitHub Actions","Linux","Node.js","C#","C++","Go","Kafka","Power BI","Tableau","Excel","Selenium","Git","REST","GraphQL","PHP","Laravel"];
