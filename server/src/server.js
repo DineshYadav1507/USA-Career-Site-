@@ -39,7 +39,7 @@ async function seedDefaultRecruitmentSources(){
 
 app.get("/api/meta",(req,res)=>res.json({ats:Object.values(ATS),industries:CATEGORIES,policy:{country:"United States",maxAgeDays:30}}));
 app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",scope:"USA-only",database:"connected"})}catch(e){res.status(503).json({ok:false,database:"unavailable"})}});
-app.get("/api/jobs",async(req,res)=>{try{const {q="",level="",category="",industry="",location="",companyId=""}=req.query;const where=["j.is_active=1","j.expires_at>NOW()","j.posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)","LOWER(j.country)='united states'"];const p=[];if(q){const term="%"+q.trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR EXISTS (SELECT 1 FROM job_skills qs WHERE qs.job_id=j.id AND LOWER(qs.skill_name) LIKE ?))");p.push(term,term,term,term,term)}if(level){where.push("LOWER(j.experience_level)=LOWER(?)");p.push(level)}if(category){where.push("LOWER(j.category)=LOWER(?)");p.push(category)}if(industry){where.push("LOWER(c.industry)=LOWER(?)");p.push(industry)}if(location){where.push("LOWER(j.location) LIKE ?");p.push("%"+location.trim().toLowerCase()+"%")}if(companyId){where.push("j.company_id=?");p.push(companyId)}const [rows]=await pool.query("SELECT j.id,j.company_id,c.name company,c.industry,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.apply_url,j.source_job_url,j.posted_at,j.expires_at,COALESCE(JSON_ARRAYAGG(js.skill_name),JSON_ARRAY()) skills FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN job_skills js ON js.job_id=j.id WHERE "+where.join(" AND ")+" GROUP BY j.id ORDER BY j.posted_at DESC,j.id DESC",p);res.json({jobs:rows})}catch(e){res.status(500).json({error:e.message})}});
+app.get("/api/jobs",async(req,res)=>{try{const {q="",level="",category="",industry="",location="",companyId="",days="30"}=req.query;const allowedDays=new Set(["3","7","15","30"]);const ageDays=allowedDays.has(String(days))?Number(days):30;const where=["j.is_active=1","j.expires_at>NOW()",`j.posted_at>=DATE_SUB(NOW(),INTERVAL ${ageDays} DAY)`,"LOWER(j.country)='united states'"];const p=[];if(q){const term="%"+q.trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR EXISTS (SELECT 1 FROM job_skills qs WHERE qs.job_id=j.id AND LOWER(qs.skill_name) LIKE ?))");p.push(term,term,term,term,term)}if(level){where.push("LOWER(j.experience_level)=LOWER(?)");p.push(level)}if(category){where.push("LOWER(j.category)=LOWER(?)");p.push(category)}if(industry){where.push("LOWER(c.industry)=LOWER(?)");p.push(industry)}if(location){where.push("LOWER(j.location) LIKE ?");p.push("%"+location.trim().toLowerCase()+"%")}if(companyId){where.push("j.company_id=?");p.push(companyId)}const [rows]=await pool.query("SELECT j.id,j.company_id,c.name company,c.industry,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.apply_url,j.source_job_url,j.posted_at,j.expires_at,COALESCE(JSON_ARRAYAGG(js.skill_name),JSON_ARRAY()) skills FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN job_skills js ON js.job_id=j.id WHERE "+where.join(" AND ")+" GROUP BY j.id ORDER BY j.posted_at DESC,j.id DESC",p);res.json({jobs:rows})}catch(e){res.status(500).json({error:e.message})}});
 
 app.get("/api/jobs/:id",async(req,res)=>{try{const [rows]=await pool.query("SELECT j.*,c.name company,c.industry,c.career_url,s.ats_type,s.source_url,COALESCE(JSON_ARRAYAGG(js.skill_name),JSON_ARRAY()) skills FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN job_sources s ON s.company_id=j.company_id LEFT JOIN job_skills js ON js.job_id=j.id WHERE j.id=? AND j.is_active=1 AND j.expires_at>NOW() AND j.posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY) AND LOWER(j.country)='united states' GROUP BY j.id LIMIT 1",[req.params.id]);if(!rows[0])return res.status(404).json({error:"Job is no longer publicly available"});res.json({job:rows[0]})}catch(e){res.status(500).json({error:e.message})}});
 
@@ -106,20 +106,26 @@ app.post("/api/admin/cleanup",auth,async(req,res)=>{const [r]=await pool.query("
 
 let syncRunning=false;
 async function syncAllAutoSources(){
- if(syncRunning){console.log("Auto sync skipped: previous scan still running");return}
+ if(syncRunning){console.log("Career Agent skipped: previous 5-minute scan still running");return}
  syncRunning=true;
+ const started=Date.now();
  try{
   const [sources]=await pool.query("SELECT id FROM job_sources WHERE auto_sync=1 AND status<>'paused' ORDER BY id");
-  for(const s of sources){
-   try{
-    const result=await syncSource(pool,s.id);
-    console.log("Auto sync",s.id,JSON.stringify(result));
-   }catch(e){
-    await pool.query("UPDATE job_sources SET last_checked_at=NOW(),status='error' WHERE id=?",[s.id]);
-    console.error("Auto sync failed",s.id,e.message);
-   }
+  const batchSize=5;
+  for(let i=0;i<sources.length;i+=batchSize){
+   const batch=sources.slice(i,i+batchSize);
+   await Promise.all(batch.map(async s=>{
+    try{
+     const result=await syncSource(pool,s.id);
+     console.log("Career Agent source",s.id,JSON.stringify(result));
+    }catch(e){
+     await pool.query("UPDATE job_sources SET last_checked_at=NOW(),status='error' WHERE id=?",[s.id]);
+     console.error("Career Agent source failed",s.id,e.message);
+    }
+   }));
   }
- }catch(e){console.error("Auto sync batch failed:",e.message)} finally {syncRunning=false}
+  console.log("Career Agent scan complete",JSON.stringify({sources:sources.length,seconds:Math.round((Date.now()-started)/1000)}));
+ }catch(e){console.error("Career Agent scan failed:",e.message)} finally {syncRunning=false}
 }
 
 const port=process.env.PORT||4000;
