@@ -100,5 +100,9 @@ async function fetchWorkdayJobs(sourceUrl){
  }
  return out;
 }
+async function fetchGenericJobs(sourceUrl){return []}\nexport async function fetchJobs(sourceUrl,atsType="generic"){
+ if(atsType==="workday")return fetchWorkdayJobs(sourceUrl);
+ return fetchGenericJobs(sourceUrl);
+}
 export function normalizeJob(j){const text=`${j.title||""} ${j.description||""} ${j.location||""}`;return{...j,experienceLevel:parseExperience(text),category:parseCategory(text),skills:skills(text)}}
 export function isUSAJob(j){return isUSA(j.location,j.description)}
