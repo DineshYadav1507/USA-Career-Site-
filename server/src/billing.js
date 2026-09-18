@@ -12,7 +12,8 @@ export async function createCheckout({userId,email}){
   line_items:[{price:process.env.STRIPE_PRICE_ID,quantity:1}],
   success_url:`${base}/account?payment=success`,
   cancel_url:`${base}/account?payment=cancelled`,
-  metadata:{user_id:String(userId)}
+  metadata:{user_id:String(userId)},
+  subscription_data:{metadata:{user_id:String(userId)}}
  });
  return session;
 }
