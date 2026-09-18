@@ -11,7 +11,8 @@ export function isUSA(location="",description=""){
  if(usStates.some(state=>loc.toLowerCase().includes(state.toLowerCase())))return true;
  if(/remote/i.test(loc))return /\\b(united states|usa|u\\.?s\\.?)\\b/i.test(desc)&&!nonUs.test(desc);
  return false;
-}\nfunction absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
+}
+function absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
 function parseExperience(t){if(/\b(intern|internship|new grad|entry[- ]level|fresher|graduate)\b|\b0\s*[-–to]?\s*1\s*years?\b/i.test(t))return"fresher";if(/\b(senior|lead|principal|manager|\d+\+?\s*years?)\b/i.test(t))return"experienced";return"other"}
 function parseCategory(t){const s=t.toLowerCase();if(/devops|sre|kubernetes|terraform|cloud engineer/.test(s))return"DevOps";if(/data analyst|data scientist|analytics|business intelligence/.test(s))return"Data";if(/cyber|security engineer|infosec/.test(s))return"Cybersecurity";if(/qa|quality assurance|test engineer/.test(s))return"QA";if(/machine learning|ai engineer|ml engineer/.test(s))return"AI/ML";return"Software Engineering"}
 const skillCatalog=["Java","Spring Boot","JavaScript","TypeScript","React","Angular","Python","SQL","MySQL","PostgreSQL","MongoDB","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Jenkins","GitHub Actions","Linux","Node.js","C#","C++","Go","Kafka","Power BI","Tableau","Excel","Selenium","Git","REST","GraphQL","PHP","Laravel"];
