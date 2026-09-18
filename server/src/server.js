@@ -111,7 +111,7 @@ async function saveJobs(source,jobs){
   const ids=[...seen];const ph=ids.map(()=>"?").join(",");
   await pool.query(`UPDATE jobs SET is_active=0 WHERE source_id=? AND external_job_id NOT IN (${ph}) AND last_seen_at<DATE_SUB(NOW(),INTERVAL 4 MINUTE)`,[source.id,...ids]);
  }
- await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<=NOW() OR country NOT IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")");
+ await pool.query(`UPDATE jobs SET is_active=0 WHERE expires_at<=NOW() OR country NOT IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")`);
  return {imported,newJobs,seen:seen.size};
 }
 async function scanSource(sourceId){
