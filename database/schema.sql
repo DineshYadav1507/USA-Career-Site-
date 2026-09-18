@@ -28,6 +28,7 @@ CREATE TABLE users(
  password_hash VARCHAR(255) NULL,
  whatsapp_number VARCHAR(30) NULL,
  whatsapp_opt_in BOOLEAN NOT NULL DEFAULT FALSE,
+ profile_skills_json JSON NULL,
  status ENUM('active','blocked') NOT NULL DEFAULT 'active',
  plan ENUM('free','pro','admin_granted') NOT NULL DEFAULT 'free',
  grant_until DATETIME NULL,
