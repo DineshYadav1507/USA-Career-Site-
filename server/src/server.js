@@ -22,6 +22,8 @@ const pool=mysql.createPool({
 });
 const JWT_SECRET=process.env.JWT_SECRET||"change-me";
 const PORT=Number(process.env.PORT||4000);
+const COUNTRIES=["USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria"];
+const COUNTRY_NAMES={USA:"United States",UK:"United Kingdom",Canada:"Canada",Australia:"Australia",Germany:"Germany",Netherlands:"Netherlands",Ireland:"Ireland",France:"France",Japan:"Japan",Singapore:"Singapore",UAE:"United Arab Emirates","Saudi Arabia":"Saudi Arabia","New Zealand":"New Zealand",Switzerland:"Switzerland",Sweden:"Sweden",Norway:"Norway",Denmark:"Denmark",Finland:"Finland",Belgium:"Belgium",Austria:"Austria"};
 const INDUSTRIES=["Healthcare","University & Education","Supply Chain","Technology","Finance & Banking","Insurance","Consulting","Retail","Manufacturing","Government","Pharmaceuticals","Energy","Telecommunications","Other"];
 const CATEGORIES=["Software Engineering","DevOps","Data","Cybersecurity","QA","AI/ML"];
 
@@ -38,17 +40,18 @@ function entitled(user){
  if(user.plan==="admin_granted"&&(!user.grant_until||new Date(user.grant_until)>new Date()))return true;
  return false;
 }
+function normalizeCountry(country){const c=String(country||"USA").trim();return COUNTRIES.includes(c)?c:"USA"}
 function normalizePhone(phone){return String(phone||"").replace(/[^\d+]/g,"").replace(/^00/,"+")}
-async function upsertCompany(name,careerUrl,industry){
+async function upsertCompany(name,careerUrl,industry,country="USA"){
  const [rows]=await pool.query("SELECT id FROM companies WHERE name=? LIMIT 1",[name]);
- if(rows[0]){await pool.query("UPDATE companies SET career_url=?,industry=? WHERE id=?",[careerUrl,industry||"Other",rows[0].id]);return rows[0].id}
- const [r]=await pool.query("INSERT INTO companies(name,career_url,industry) VALUES(?,?,?)",[name,careerUrl,industry||"Other"]);return r.insertId;
+ if(rows[0]){await pool.query("UPDATE companies SET career_url=?,industry=?,country=? WHERE id=?",[careerUrl,industry||"Other",normalizeCountry(country),rows[0].id]);return rows[0].id}
+ const [r]=await pool.query("INSERT INTO companies(name,career_url,industry,country) VALUES(?,?,?,?)",[name,careerUrl,industry||"Other",normalizeCountry(country)]);return r.insertId;
 }
-async function upsertSource(name,url,industry){
- const companyId=await upsertCompany(name,url,industry);
+async function upsertSource(name,url,industry,country="USA"){
+ const companyId=await upsertCompany(name,url,industry,country);
  const [rows]=await pool.query("SELECT id FROM career_sources WHERE source_url=? LIMIT 1",[url]);
  if(rows[0])return rows[0].id;
- const [r]=await pool.query("INSERT INTO career_sources(company_id,source_url,source_type,auto_sync,status) VALUES(?,?,?,1,'active')",[companyId,url,"generic"]);
+ const [r]=await pool.query("INSERT INTO career_sources(company_id,source_url,country,source_type,auto_sync,status) VALUES(?,?,?, ?,1,'active')",[companyId,url,normalizeCountry(country),"generic"]);
  return r.insertId;
 }
 async function notifyMatchingUsers(job){
@@ -92,7 +95,7 @@ async function saveJobs(source,jobs){
   const sql=`INSERT INTO jobs(company_id,source_id,external_job_id,title,description,location,country,location_type,experience_level,category,employment_type,skills_json,apply_url,source_job_url,posted_at,date_source,first_seen_at,last_seen_at,expires_at,is_active)
   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW(),?,1)
   ON DUPLICATE KEY UPDATE company_id=VALUES(company_id),title=VALUES(title),description=VALUES(description),location=VALUES(location),location_type=VALUES(location_type),experience_level=VALUES(experience_level),category=VALUES(category),employment_type=VALUES(employment_type),skills_json=VALUES(skills_json),apply_url=VALUES(apply_url),source_job_url=VALUES(source_job_url),posted_at=VALUES(posted_at),date_source=VALUES(date_source),last_seen_at=NOW(),expires_at=VALUES(expires_at),is_active=1,updated_at=NOW()`;
-  const params=[source.company_id,source.id,external,j.title,j.description||"",j.location||"","United States",j.locationType||"unknown",j.experienceLevel||"other",j.category||"Software Engineering",j.employmentType||null,JSON.stringify(skills),j.applyUrl,j.applyUrl,posted,j.dateSource||"published",expires];
+  const params=[source.company_id,source.id,external,j.title,j.description||"",j.location||"",source.country||"USA",j.locationType||"unknown",j.experienceLevel||"other",j.category||"Software Engineering",j.employmentType||null,JSON.stringify(skills),j.applyUrl,j.applyUrl,posted,j.dateSource||"published",expires];
   await pool.query(sql,params);
   const [row]=await pool.query("SELECT id FROM jobs WHERE source_id=? AND external_job_id=? LIMIT 1",[source.id,external]);
   const jobId=row[0]?.id;
@@ -108,7 +111,7 @@ async function saveJobs(source,jobs){
   const ids=[...seen];const ph=ids.map(()=>"?").join(",");
   await pool.query(`UPDATE jobs SET is_active=0 WHERE source_id=? AND external_job_id NOT IN (${ph}) AND last_seen_at<DATE_SUB(NOW(),INTERVAL 4 MINUTE)`,[source.id,...ids]);
  }
- await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<=NOW() OR country<>'United States'");
+ await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<=NOW() OR country NOT IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")");
  return {imported,newJobs,seen:seen.size};
 }
 async function scanSource(sourceId){
@@ -117,7 +120,7 @@ async function scanSource(sourceId){
  const source=rows[0];const run=(await pool.query("INSERT INTO agent_runs(source_id,started_at,status) VALUES(?,NOW(),'running')",[sourceId]))[0];
  const runId=run.insertId;
  try{
-  const result=await scanCareerPage(source.source_url);
+  const result=await scanCareerPage(source.source_url,source.country);
   const saved=await saveJobs(source,result);
   await pool.query("UPDATE career_sources SET status='active',last_checked_at=NOW(),last_success_at=NOW(),last_sync_found=?,last_sync_imported=?,last_error=NULL,discovered_ats=? WHERE id=?",[result.length,saved.imported,result.ats||"generic",sourceId]);
   await pool.query("UPDATE agent_runs SET finished_at=NOW(),status='success',found_count=?,imported_count=?,message=? WHERE id=?",[result.length,saved.imported,`ATS ${result.ats||"generic"}; new ${saved.newJobs}`,runId]);
@@ -160,18 +163,19 @@ app.post("/api/billing/webhook",express.raw({type:"application/json"}),async(req
 app.use(express.json({limit:"2mb"}));
 
 app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",database:"connected",agent:"5-minute-career-agent",whatsapp:whatsapp.status()})}catch(e){res.status(503).json({ok:false,error:e.message})}});
-app.get("/api/meta",(req,res)=>res.json({industries:INDUSTRIES,categories:CATEGORIES,dateWindows:[3,7,15,30],features:["Career Agent","WhatsApp Web JS Alerts","Website Q&A Bot","Subscriptions","Admin Grants"]}));
+app.get("/api/meta",(req,res)=>res.json({countries:COUNTRIES.map(code=>({code,name:COUNTRY_NAMES[code]})),industries:INDUSTRIES,categories:CATEGORIES,dateWindows:[3,7,15,30],features:["Career Agent","WhatsApp Web JS Alerts","Website Q&A Bot","Subscriptions","Admin Grants"]}));
 
 app.get("/api/jobs",async(req,res)=>{
  try{
   const days=[3,7,15,30].includes(Number(req.query.days))?Number(req.query.days):30;
-  const p=[];const where=[`j.is_active=1`,"j.country='United States'","j.expires_at>NOW()",`COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL ${days} DAY)`];
+  const p=[];const where=[`j.is_active=1`,"j.country IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")","j.expires_at>NOW()",`COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL ${days} DAY)`];
+  if(req.query.country){const c=normalizeCountry(req.query.country);where.push("j.country=?");p.push(c)}
   if(req.query.q){const t="%"+String(req.query.q).trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR LOWER(j.category) LIKE ? OR LOWER(CAST(j.skills_json AS CHAR)) LIKE ?)");p.push(t,t,t,t,t,t)}
   if(req.query.category){where.push("j.category=?");p.push(req.query.category)}
   if(req.query.industry){where.push("c.industry=?");p.push(req.query.industry)}
   if(req.query.level){where.push("j.experience_level=?");p.push(req.query.level)}
   if(req.query.location){where.push("LOWER(j.location) LIKE ?");p.push("%"+String(req.query.location).toLowerCase()+"%")}
-  const [jobs]=await pool.query(`SELECT j.id,j.company_id,c.name company,c.industry,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.employment_type,j.skills_json,j.apply_url,j.source_job_url,j.posted_at,j.date_source,j.first_seen_at FROM jobs j JOIN companies c ON c.id=j.company_id WHERE ${where.join(" AND ")} ORDER BY COALESCE(j.posted_at,j.first_seen_at) DESC,j.id DESC LIMIT 500`,p);
+  const [jobs]=await pool.query(`SELECT j.id,j.company_id,c.name company,c.industry,j.country,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.employment_type,j.skills_json,j.apply_url,j.source_job_url,j.posted_at,j.date_source,j.first_seen_at FROM jobs j JOIN companies c ON c.id=j.company_id WHERE ${where.join(" AND ")} ORDER BY COALESCE(j.posted_at,j.first_seen_at) DESC,j.id DESC LIMIT 500`,p);
   jobs.forEach(j=>{try{j.skills=JSON.parse(j.skills_json||"[]")}catch{j.skills=[]}delete j.skills_json});
   res.json({jobs,days});
  }catch(e){res.status(500).json({error:e.message})}
@@ -187,9 +191,9 @@ app.get("/api/bot/answer",async(req,res)=>{try{res.json({answer:await websiteAns
 app.post("/api/bot/answer",async(req,res)=>{try{res.json({answer:await websiteAnswer(req.body?.question)})}catch(e){res.status(500).json({error:e.message})}});
 app.get("/api/industries",async(req,res)=>{const [rows]=await pool.query("SELECT c.industry,COUNT(j.id) current_jobs FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) GROUP BY c.industry ORDER BY current_jobs DESC");res.json({industries:rows})});
 
-app.post("/api/auth/register",async(req,res)=>{try{const{name="",email, password,whatsappNumber=""}=req.body||{};if(!email||!password)return res.status(400).json({error:"Email and password are required"});const hash=await bcrypt.hash(password,12);const phone=normalizePhone(whatsappNumber);const [r]=await pool.query("INSERT INTO users(name,email,password_hash,whatsapp_number) VALUES(?,?,?,?)",[name,email.toLowerCase(),hash,phone||null]);res.json({token:tokenFor({type:"user",id:r.insertId}),user:{id:r.insertId,name,email,whatsapp_number:phone}})}catch(e){res.status(400).json({error:e.code==="ER_DUP_ENTRY"?"Email already registered":e.message})}});
-app.post("/api/auth/login",async(req,res)=>{const [rows]=await pool.query("SELECT * FROM users WHERE email=? LIMIT 1",[String(req.body?.email||"").toLowerCase()]);if(!rows[0]||!rows[0].password_hash||!(await bcrypt.compare(String(req.body?.password||""),rows[0].password_hash)))return res.status(401).json({error:"Invalid email or password"});res.json({token:tokenFor({type:"user",id:rows[0].id}),user:{id:rows[0].id,name:rows[0].name,email:rows[0].email,whatsapp_number:rows[0].whatsapp_number,whatsapp_opt_in:rows[0].whatsapp_opt_in,plan:rows[0].plan,grant_until:rows[0].grant_until}})});
-app.get("/api/account",userAuth,async(req,res)=>{const [rows]=await pool.query("SELECT id,name,email,whatsapp_number,whatsapp_opt_in,profile_skills_json,plan,grant_until,created_at FROM users WHERE id=?",[req.user.id]);const [alerts]=await pool.query("SELECT * FROM job_alerts WHERE user_id=? ORDER BY created_at DESC",[req.user.id]);try{rows[0].profile_skills=JSON.parse(rows[0].profile_skills_json||"[]")}catch{rows[0].profile_skills=[]}delete rows[0].profile_skills_json;res.json({user:rows[0],alerts,billingConfigured:billingConfigured()})});
+app.post("/api/auth/register",async(req,res)=>{try{const{name="",email,password,whatsappNumber="",country="USA"}=req.body||{};if(!email||!password)return res.status(400).json({error:"Email and password are required"});const hash=await bcrypt.hash(password,12);const phone=normalizePhone(whatsappNumber);const [r]=await pool.query("INSERT INTO users(name,email,password_hash,whatsapp_number,country) VALUES(?,?,?,?,?)",[name,email.toLowerCase(),hash,phone||null,normalizeCountry(country)]);res.json({token:tokenFor({type:"user",id:r.insertId}),user:{id:r.insertId,name,email,country:normalizeCountry(country),whatsapp_number:phone}})}catch(e){res.status(400).json({error:e.code==="ER_DUP_ENTRY"?"Email already registered":e.message})}});
+app.post("/api/auth/login",async(req,res)=>{const [rows]=await pool.query("SELECT * FROM users WHERE email=? LIMIT 1",[String(req.body?.email||"").toLowerCase()]);if(!rows[0]||!rows[0].password_hash||!(await bcrypt.compare(String(req.body?.password||""),rows[0].password_hash)))return res.status(401).json({error:"Invalid email or password"});res.json({token:tokenFor({type:"user",id:rows[0].id}),user:{id:rows[0].id,name:rows[0].name,email:rows[0].email,country:rows[0].country,whatsapp_number:rows[0].whatsapp_number,whatsapp_opt_in:rows[0].whatsapp_opt_in,plan:rows[0].plan,grant_until:rows[0].grant_until}})});
+app.get("/api/account",userAuth,async(req,res)=>{const [rows]=await pool.query("SELECT id,name,email,country,whatsapp_number,whatsapp_opt_in,profile_skills_json,plan,grant_until,created_at FROM users WHERE id=?",[req.user.id]);const [alerts]=await pool.query("SELECT * FROM job_alerts WHERE user_id=? ORDER BY created_at DESC",[req.user.id]);try{rows[0].profile_skills=JSON.parse(rows[0].profile_skills_json||"[]")}catch{rows[0].profile_skills=[]}delete rows[0].profile_skills_json;res.json({user:rows[0],alerts,billingConfigured:billingConfigured()})});
 app.post("/api/account/skills",userAuth,async(req,res)=>{const skills=parseSkills(req.body?.skills);await pool.query("UPDATE users SET profile_skills_json=? WHERE id=?",[JSON.stringify(skills),req.user.id]);res.json({ok:true,skills})});
 app.post("/api/account/whatsapp",userAuth,async(req,res)=>{const phone=normalizePhone(req.body?.whatsappNumber);const opt=Boolean(req.body?.optIn);if(opt&&!/^\+\d{8,15}$/.test(phone))return res.status(400).json({error:"Use WhatsApp number in international format, e.g. +919876543210"});await pool.query("UPDATE users SET whatsapp_number=?,whatsapp_opt_in=? WHERE id=?",[phone||null,opt,req.user.id]);res.json({ok:true})});
 app.post("/api/alerts",userAuth,async(req,res)=>{const{keyword="",category="",industry="",location="",daysWindow=30,skills=[]}=req.body||{};if(!keyword&&!category&&!industry&&!location&&!skills.length)return res.status(400).json({error:"Add at least one alert condition"});const days=[3,7,15,30].includes(Number(daysWindow))?Number(daysWindow):30;const [r]=await pool.query("INSERT INTO job_alerts(user_id,keyword,category,industry,location,skills_json,days_window) VALUES(?,?,?,?,?,?,?)",[req.user.id,keyword,category||null,industry||null,location||null,JSON.stringify(parseSkills(skills)),days]);res.json({ok:true,id:r.insertId})});
@@ -198,8 +202,8 @@ app.post("/api/billing/checkout",userAuth,async(req,res)=>{try{const [u]=await p
 
 app.post("/api/admin/login",async(req,res)=>{const [rows]=await pool.query("SELECT * FROM admin_users WHERE email=? LIMIT 1",[String(req.body?.email||"").toLowerCase()]);if(!rows[0]||!(await bcrypt.compare(String(req.body?.password||""),rows[0].password_hash)))return res.status(401).json({error:"Invalid admin credentials"});res.json({token:tokenFor({type:"admin",id:rows[0].id,email:rows[0].email})})});
 app.get("/api/admin/dashboard",adminAuth,async(req,res)=>{const [[stats]]=await pool.query("SELECT (SELECT COUNT(*) FROM jobs WHERE is_active=1 AND country='United States') jobs,(SELECT COUNT(*) FROM companies) companies,(SELECT COUNT(*) FROM career_sources WHERE status='active') sources,(SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM job_alerts WHERE active=1) alerts");const [recent]=await pool.query("SELECT ar.id,c.name company,ar.found_count,ar.imported_count,ar.status,ar.started_at,ar.message FROM agent_runs ar LEFT JOIN career_sources s ON s.id=ar.source_id LEFT JOIN companies c ON c.id=s.company_id ORDER BY ar.id DESC LIMIT 20");res.json({stats,recent})});
-app.get("/api/admin/sources",adminAuth,async(req,res)=>{const [rows]=await pool.query("SELECT s.id,s.company_id,c.name company,c.industry,s.source_url,s.source_type,s.status,s.last_checked_at,s.last_success_at,s.last_sync_found,s.last_sync_imported,s.last_error,s.discovered_ats FROM career_sources s JOIN companies c ON c.id=s.company_id ORDER BY c.name");res.json({sources:rows})});
-app.post("/api/admin/sources",adminAuth,async(req,res)=>{try{const{name,companyName,url,careerUrl,industry="Other"}=req.body||{};const company=name||companyName;const sourceUrl=url||careerUrl;if(!company||!sourceUrl)return res.status(400).json({error:"Company and career URL are required"});const id=await upsertSource(company,sourceUrl,industry);res.json({ok:true,id,message:"Career Agent source added. It will be scanned automatically every 5 minutes."})}catch(e){res.status(400).json({error:e.message})}});
+app.get("/api/admin/sources",adminAuth,async(req,res)=>{const [rows]=await pool.query("SELECT s.id,s.company_id,c.name company,c.industry,s.country,s.source_url,s.source_type,s.status,s.last_checked_at,s.last_success_at,s.last_sync_found,s.last_sync_imported,s.last_error,s.discovered_ats FROM career_sources s JOIN companies c ON c.id=s.company_id ORDER BY c.name");res.json({sources:rows})});
+app.post("/api/admin/sources",adminAuth,async(req,res)=>{try{const{name,companyName,url,careerUrl,industry="Other",country="USA"}=req.body||{};const company=name||companyName;const sourceUrl=url||careerUrl;if(!company||!sourceUrl)return res.status(400).json({error:"Company and career URL are required"});const id=await upsertSource(company,sourceUrl,industry,normalizeCountry(country));res.json({ok:true,id,message:"Career Agent source added. It will be scanned automatically every 5 minutes."})}catch(e){res.status(400).json({error:e.message})}});
 app.post("/api/admin/sources/:id/scan",adminAuth,async(req,res)=>{try{res.json(await scanSource(req.params.id))}catch(e){res.status(400).json({error:e.message})}});
 app.delete("/api/admin/sources/:id",adminAuth,async(req,res)=>{await pool.query("DELETE FROM career_sources WHERE id=?",[req.params.id]);res.json({ok:true,message:"Source and its imported jobs removed"})});
 
