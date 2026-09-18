@@ -11,7 +11,7 @@ export async function syncSource(pool,sourceId){
   const expires=new Date(posted.getTime()+30*86400000);if(expires<=new Date()){skipped++;skippedExpired++;continue}
   const externalId=j.externalJobId||j.applyUrl;seen.add(externalId);
   const [r]=await pool.query(`INSERT INTO jobs(company_id,source_url,external_job_id,title,description,location,country,location_type,experience_level,category,apply_url,source_job_url,employment_type,posted_at,expires_at,is_active)
-   VALUES(?,?,?,?,?,?, 'United States', ?,?,?,?,?,?,?,?,?)
+   VALUES(?,?,?,?,?,?,"United States",?,?,?,?,?,?,?,?,?)
    ON DUPLICATE KEY UPDATE title=VALUES(title),description=VALUES(description),location=VALUES(location),location_type=VALUES(location_type),experience_level=VALUES(experience_level),category=VALUES(category),apply_url=VALUES(apply_url),source_job_url=VALUES(source_job_url),employment_type=VALUES(employment_type),posted_at=VALUES(posted_at),expires_at=VALUES(expires_at),is_active=IF(VALUES(expires_at)>NOW() AND VALUES(posted_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY),1,0),updated_at=CURRENT_TIMESTAMP`,
    [s.company_id,s.source_url,externalId,j.title,j.description||"",j.location||"",j.locationType||"unknown",j.experienceLevel,j.category,j.applyUrl,j.applyUrl,j.employmentType||null,posted,expires]);
   const jobId=r.insertId||(await pool.query("SELECT id FROM jobs WHERE company_id=? AND external_job_id=? LIMIT 1",[s.company_id,externalId]))[0][0]?.id;
