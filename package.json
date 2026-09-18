@@ -1,0 +1,8 @@
+{
+  "name": "talent-inspirations",
+  "private": true,
+  "scripts": {
+    "lint": "echo 'lint placeholder - frontend/backend work starts next'",
+    "build": "echo 'build placeholder - frontend/backend work starts next'"
+  }
+}
