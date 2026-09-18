@@ -62,13 +62,13 @@ async function notifyMatchingUsers(job){
   const keywordHit=!terms.length||terms.some(t=>text.includes(t));
   const categoryHit=!a.category||a.category===job.category;
   const industryHit=!a.industry||a.industry===job.industry;
-  const locationHit=!a.location||job.location.toLowerCase().includes(String(a.location).toLowerCase());
+  const locationHit=!a.location||String(job.location||"").toLowerCase().includes(String(a.location).toLowerCase());
   const skillHit=!skillList.length||skillList.some(s=>text.includes(String(s).toLowerCase()));
   if(!keywordHit||!categoryHit||!industryHit||!locationHit||!skillHit)continue;
   if(!entitled(a))continue;
   const msg=`🇺🇸 New USA Job Alert\n\n${job.title}\n${job.company}\n${job.location||"USA"}\nCategory: ${job.category}\nSkills: ${(job.skills||[]).slice(0,8).join(", ")||"See job details"}\n\nApply: ${job.apply_url}\n\nTalent Inspirations`;
   try{
-   const result=await whatsapp.send(normalizePhone(a.whatsapp_number),msg,{type:"job_alert",jobId:job.id,alertId:a.id});
+   await whatsapp.send(normalizePhone(a.whatsapp_number),msg,{type:"job_alert",jobId:job.id,alertId:a.id});
    const status="queued";
    await pool.query("INSERT INTO whatsapp_messages(user_id,job_id,phone,message_text,provider_message_id,status,error_text,sent_at) VALUES(?,?,?,?,?,?,?,?)",[a.user_id,job.id,a.whatsapp_number,msg,null,status,null,null]);
    await pool.query("UPDATE job_alerts SET last_sent_at=NOW() WHERE id=?",[a.id]);
@@ -92,7 +92,7 @@ async function saveJobs(source,jobs){
   const sql=`INSERT INTO jobs(company_id,source_id,external_job_id,title,description,location,country,location_type,experience_level,category,employment_type,skills_json,apply_url,source_job_url,posted_at,date_source,first_seen_at,last_seen_at,expires_at,is_active)
   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW(),?,1)
   ON DUPLICATE KEY UPDATE company_id=VALUES(company_id),title=VALUES(title),description=VALUES(description),location=VALUES(location),location_type=VALUES(location_type),experience_level=VALUES(experience_level),category=VALUES(category),employment_type=VALUES(employment_type),skills_json=VALUES(skills_json),apply_url=VALUES(apply_url),source_job_url=VALUES(source_job_url),posted_at=VALUES(posted_at),date_source=VALUES(date_source),last_seen_at=NOW(),expires_at=VALUES(expires_at),is_active=1,updated_at=NOW()`;
-  const params=[source.company_id,source.id,external,j.title,j.description||"",j.location||"",j.locationType||"unknown",j.experienceLevel||"other",j.category||"Software Engineering",j.employmentType||null,JSON.stringify(skills),j.applyUrl,j.applyUrl,posted,j.dateSource||"published",expires];
+  const params=[source.company_id,source.id,external,j.title,j.description||"",j.location||"","United States",j.locationType||"unknown",j.experienceLevel||"other",j.category||"Software Engineering",j.employmentType||null,JSON.stringify(skills),j.applyUrl,j.applyUrl,posted,j.dateSource||"published",expires];
   await pool.query(sql,params);
   const [row]=await pool.query("SELECT id FROM jobs WHERE source_id=? AND external_job_id=? LIMIT 1",[source.id,external]);
   const jobId=row[0]?.id;
