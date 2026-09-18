@@ -2,16 +2,7 @@ import * as cheerio from "cheerio";
 import { URL } from "node:url";
 const usStates=["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
 const nonUs=/\b(india|canada|united kingdom|uk|germany|australia|singapore|ireland|france|spain|netherlands|brazil)\b/i;
-export function isUSA(location="",description=""){
- const loc=String(location||"");
- const desc=String(description||"");
- if(nonUs.test(loc))return false;
- if(/remote\\s*[-–—:]?\\s*(worldwide|global|anywhere)/i.test(loc))return false;
- if(/\\b(united states|usa|u\\.?s\\.?)\\b/i.test(loc))return true;
- if(usStates.some(state=>loc.toLowerCase().includes(state.toLowerCase())))return true;
- if(/remote/i.test(loc))return /\\b(united states|usa|u\\.?s\\.?)\\b/i.test(desc)&&!nonUs.test(desc);
- return false;
-}
+export function isUSA(location="",description=""){const s=`${location} ${description}`;if(nonUs.test(s))return false;if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(s))return false;return /\b(united states|usa|u\.?s\.?)\b/i.test(location)||usStates.some(x=>new RegExp(`\\b${x}\\b`,"i").test(location))||( /remote/i.test(location)&&/\b(united states|usa|u\.?s\.?)\b/i.test(s));}
 function absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
 function parseExperience(t){if(/\b(intern|internship|new grad|entry[- ]level|fresher|graduate)\b|\b0\s*[-–to]?\s*1\s*years?\b/i.test(t))return"fresher";if(/\b(senior|lead|principal|manager|\d+\+?\s*years?)\b/i.test(t))return"experienced";return"other"}
 function parseCategory(t){const s=t.toLowerCase();if(/devops|sre|kubernetes|terraform|cloud engineer/.test(s))return"DevOps";if(/data analyst|data scientist|analytics|business intelligence/.test(s))return"Data";if(/cyber|security engineer|infosec/.test(s))return"Cybersecurity";if(/qa|quality assurance|test engineer/.test(s))return"QA";if(/machine learning|ai engineer|ml engineer/.test(s))return"AI/ML";return"Software Engineering"}
@@ -99,11 +90,6 @@ async function fetchWorkdayJobs(sourceUrl){
   }
  }
  return out;
-}
-async function fetchGenericJobs(sourceUrl){return []}
-export async function fetchJobs(sourceUrl,atsType="generic"){
- if(atsType==="workday")return fetchWorkdayJobs(sourceUrl);
- return fetchGenericJobs(sourceUrl);
 }
 export function normalizeJob(j){const text=`${j.title||""} ${j.description||""} ${j.location||""}`;return{...j,experienceLevel:parseExperience(text),category:parseCategory(text),skills:skills(text)}}
 export function isUSAJob(j){return isUSA(j.location,j.description)}
