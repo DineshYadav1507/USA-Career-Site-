@@ -100,7 +100,8 @@ async function fetchWorkdayJobs(sourceUrl){
  }
  return out;
 }
-async function fetchGenericJobs(sourceUrl){return []}\nexport async function fetchJobs(sourceUrl,atsType="generic"){
+async function fetchGenericJobs(sourceUrl){return []}
+export async function fetchJobs(sourceUrl,atsType="generic"){
  if(atsType==="workday")return fetchWorkdayJobs(sourceUrl);
  return fetchGenericJobs(sourceUrl);
 }
