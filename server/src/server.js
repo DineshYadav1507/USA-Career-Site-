@@ -4,7 +4,7 @@ import cors from "cors";
 import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import {syncSource} from "./sync.js";import {detectSource,ATS,CATEGORIES,classifyIndustry} from "./sourceRegistry.js";
+import {syncSource} from "./sync.js";import {detectSource,ATS,CATEGORIES,classifyIndustry,DEFAULT_RECRUITMENT_SOURCES} from "./sourceRegistry.js";
 import { URL } from "node:url";
 
 const app=express();
@@ -24,6 +24,18 @@ function category(text=""){const s=text.toLowerCase();if(/devops|sre|kubernetes|
 function extractSkills(text=""){const catalog=["Java","Spring Boot","JavaScript","TypeScript","React","Angular","Python","SQL","MySQL","PostgreSQL","MongoDB","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Jenkins","GitHub Actions","Linux","Node.js","C#","C++","Go","Kafka","Power BI","Tableau","Excel","Selenium","Git"];return catalog.filter(x=>new RegExp(`\\b${x.replace(/[+.#]/g,"\\$&")}\\b`,"i").test(text))}
 function normalizeCareerUrl(raw){const u=new URL(raw);if(!["http:","https:"].includes(u.protocol))throw Error("Only HTTP(S) URLs are allowed");return u.toString()}
 function parseDate(v){const d=v?new Date(v):new Date();return Number.isNaN(d.getTime())?new Date():d}
+async function seedDefaultRecruitmentSources(){
+ for(const item of DEFAULT_RECRUITMENT_SOURCES){
+  try{
+   const [existing]=await pool.query("SELECT id FROM companies WHERE name=? LIMIT 1",[item.name]);
+   let companyId;
+   if(existing[0]) companyId=existing[0].id;
+   else {const [ins]=await pool.query("INSERT INTO companies(name,career_url,industry) VALUES(?,?,?)",[item.name,item.url,classifyIndustry(item.name,item.url)]);companyId=ins.insertId;}
+   const [source]=await pool.query("SELECT id FROM job_sources WHERE company_id=? AND source_url=? LIMIT 1",[companyId,item.url]);
+   if(!source[0]) await pool.query("INSERT INTO job_sources(company_id,source_url,ats_type,auto_sync) VALUES(?,?,?,?)",[companyId,item.url,detectSource(item.url),true]);
+  }catch(e){console.error("Default source seed failed:",item.name,e.message)}
+ }
+}
 
 app.get("/api/meta",(req,res)=>res.json({ats:Object.values(ATS),industries:CATEGORIES,policy:{country:"United States",maxAgeDays:30}}));
 app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",scope:"USA-only",database:"connected"})}catch(e){res.status(503).json({ok:false,database:"unavailable"})}});
@@ -92,4 +104,4 @@ app.delete("/api/admin/jobs/:id",auth,async(req,res)=>{const [r]=await pool.quer
 app.delete("/api/admin/sources/:id",auth,async(req,res)=>{await pool.query("DELETE FROM job_sources WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.post("/api/admin/cleanup",auth,async(req,res)=>{const [r]=await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<NOW() OR country<>'United States'");res.json({deactivated:r.affectedRows})});
 
-app.listen(process.env.PORT||4000,()=>console.log(`Talent Inspirations API listening on ${process.env.PORT||4000}`));
+const port=process.env.PORT||4000;\nseedDefaultRecruitmentSources().finally(()=>app.listen(port,()=>console.log(`Talent Inspirations API listening on ${port}`)));
