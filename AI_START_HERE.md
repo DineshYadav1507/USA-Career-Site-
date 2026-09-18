@@ -8,9 +8,9 @@ If you are a new AI assistant, Claude, Codex, or developer joining this project,
 
 **Project:** Talent Inspirations  
 **Repository:** USA-Career-Site-  
-**Primary goal:** A USA-only job aggregation, search, personalization, subscription, and alert platform.
+**Primary goal:** A 20-country job aggregation, search, personalization, subscription, and alert platform.
 
-The product is not a generic global job board. The USA-only invariant is important.
+The product is not a generic global job board. The 20-country invariant is important.
 
 ## 2. Original product idea
 
@@ -103,7 +103,7 @@ It should answer product questions such as:
 - What does Pro provide?
 - What are the benefits?
 - What date filters exist?
-- Is the platform USA-only?
+- Is the platform 20-country?
 - How do alerts work?
 - How does WhatsApp delivery work?
 - How does the Career Agent work?
@@ -186,7 +186,7 @@ Some career sites render jobs only after browser JavaScript executes. Those sour
 
 Do not claim universal career-site support.
 
-## 6. USA-only rule
+## 6. 20-country rule
 
 The agent uses USA state names/codes and USA indicators.
 
@@ -579,7 +579,7 @@ Do not hide these gaps from a developer working on the project.
 1. Read this file first.
 2. Inspect the actual code before proposing changes.
 3. Do not assume old chat context is current.
-4. Keep USA-only behavior.
+4. Keep 20-country behavior.
 5. Preserve employer Apply URLs.
 6. Do not reintroduce deleted legacy files.
 7. Keep WhatsApp one-to-one and opt-in.
@@ -633,3 +633,12 @@ If future work changes the product idea, architecture, database, API, deployment
 3. any relevant `docs/` file
 
 This keeps future AI sessions self-contained.
+
+
+## Product expansion: country-first jobs
+
+Current supported countries are: USA, UK, Canada, Australia, Germany, Netherlands, Ireland, France, Japan, Singapore, UAE, Saudi Arabia, New Zealand, Switzerland, Sweden, Norway, Denmark, Finland, Belgium and Austria.
+
+User registration captures a preferred country. Public job discovery defaults to that country and can be changed with the country filter. Admin career sources have a country assignment, and the Career Agent receives the source country when classifying/filtering jobs. Keep country as a first-class domain field in future backend, frontend, alert, analytics and CRM work.
+
+The admin UI is intended to evolve into a premium CRM/control center with dashboard metrics, country-aware source management, user management, grants, alerts and Agent commands.
