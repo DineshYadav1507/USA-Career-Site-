@@ -75,6 +75,20 @@ app.post("/api/admin/jobs",auth,async(req,res)=>{
 
 app.post("/api/admin/sources/:id/sync",auth,async(req,res)=>{try{res.json(await syncSource(pool,req.params.id))}catch(e){res.status(400).json({error:e.message})}});
 
+app.put("/api/admin/jobs/:id",auth,async(req,res)=>{try{
+ const {title,description,location,locationType="unknown",experienceLevel="other",category="Software Engineering",employmentType="",skills=[],applyUrl,postedAt}=req.body||{};
+ if(!title||!description||!location||!applyUrl)return res.status(400).json({error:"Title, description, location and apply link are required"});
+ if(!/\b(united states|usa|u\.?s\.?)\b/i.test(location)&&!/\b(CA|NY|TX|FL|WA|NJ|MA|IL|VA|NC|GA|AZ|CO|PA|OH|MI|MD|DC|MN|OR|UT|NV|CT|TN|MO|WI|IN|SC|AL|LA|KY|OK|IA|KS|AR|MS|NE|NM|ID|HI|ME|NH|RI|DE|MT|SD|ND|WY|WV|VT|AK)\b/i.test(location))return res.status(422).json({error:"Only USA jobs can be published"});
+ const posted=new Date(postedAt||Date.now());if(Number.isNaN(posted.getTime()))return res.status(400).json({error:"Invalid published date"});const expires=new Date(posted.getTime()+30*86400000);
+ if(expires<=new Date())return res.status(422).json({error:"Published date is older than 30 days"});
+ const [r]=await pool.query("UPDATE jobs SET title=?,description=?,location=?,location_type=?,experience_level=?,category=?,employment_type=?,apply_url=?,source_job_url=?,posted_at=?,expires_at=?,is_active=1 WHERE id=?",[title,description,location,locationType,experienceLevel,category,employmentType||null,applyUrl,applyUrl,posted,expires,req.params.id]);
+ if(!r.affectedRows)return res.status(404).json({error:"Job not found"});
+ await pool.query("DELETE FROM job_skills WHERE job_id=?",[req.params.id]);for(const skill of (Array.isArray(skills)?skills:[])){const x=String(skill).trim();if(x)await pool.query("INSERT IGNORE INTO job_skills(job_id,skill_name) VALUES(?,?)",[req.params.id,x])}
+ res.json({ok:true,message:"Job updated"});
+}catch(e){res.status(400).json({error:e.message})}});
+
+app.delete("/api/admin/jobs/:id",auth,async(req,res)=>{const [r]=await pool.query("UPDATE jobs SET is_active=0 WHERE id=?",[req.params.id]);if(!r.affectedRows)return res.status(404).json({error:"Job not found"});res.json({ok:true,message:"Job removed from public index"})});
+
 app.delete("/api/admin/sources/:id",auth,async(req,res)=>{await pool.query("DELETE FROM job_sources WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.post("/api/admin/cleanup",auth,async(req,res)=>{const [r]=await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<NOW() OR country<>'United States'");res.json({deactivated:r.affectedRows})});
 
