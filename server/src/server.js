@@ -104,4 +104,26 @@ app.delete("/api/admin/jobs/:id",auth,async(req,res)=>{const [r]=await pool.quer
 app.delete("/api/admin/sources/:id",auth,async(req,res)=>{await pool.query("DELETE FROM job_sources WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.post("/api/admin/cleanup",auth,async(req,res)=>{const [r]=await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<NOW() OR country<>'United States'");res.json({deactivated:r.affectedRows})});
 
-const port=process.env.PORT||4000;\nseedDefaultRecruitmentSources().finally(()=>app.listen(port,()=>console.log(`Talent Inspirations API listening on ${port}`)));
+async function syncAllAutoSources(){
+ try{
+  const [sources]=await pool.query("SELECT id FROM job_sources WHERE auto_sync=1 AND status<>'paused' ORDER BY id");
+  for(const s of sources){
+   try{
+    const result=await syncSource(pool,s.id);
+    console.log("Auto sync",s.id,result.imported,"jobs imported");
+   }catch(e){
+    await pool.query("UPDATE job_sources SET last_checked_at=NOW(),status='error' WHERE id=?",[s.id]);
+    console.error("Auto sync failed",s.id,e.message);
+   }
+  }
+ }catch(e){console.error("Auto sync batch failed:",e.message)}
+}
+
+const port=process.env.PORT||4000;
+seedDefaultRecruitmentSources().finally(()=>{
+ app.listen(port,()=>{
+  console.log(`Talent Inspirations API listening on ${port}`);
+  syncAllAutoSources();
+  setInterval(syncAllAutoSources,6*60*60*1000);
+ });
+});
