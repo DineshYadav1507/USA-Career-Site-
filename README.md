@@ -1,6 +1,6 @@
 # Talent Inspirations
 
-**Talent Inspirations** is a USA-only job discovery, filtering, alert, and subscription platform.
+**Talent Inspirations** is a 20-country job discovery, filtering, alert, and subscription platform.
 
 The project is designed so that an administrator can add public employer career pages and a **Career Agent** can continuously discover and maintain public job listings. Users can search jobs by role, category, industry, location, skills, and recency, then create personalized alerts. WhatsApp delivery is implemented with **whatsapp-web.js** and is opt-in, one-to-one, queued, delayed, and rate-limited.
 
@@ -8,7 +8,7 @@ The project is designed so that an administrator can add public employer career 
 
 ## Product goals
 
-- USA jobs only.
+- jobs across 20 supported countries.
 - Admin-managed public employer career sources.
 - Career Agent scans active sources every **5 minutes**.
 - Discover public Greenhouse, Lever, Workday, JSON-LD JobPosting, and generic career-page data where exposed.
@@ -202,7 +202,7 @@ Current implementation is primarily HTTP/HTML/ATS based. JavaScript-only career 
 - Original employer Apply URL is retained.
 - Jobs not seen in a source are deactivated after the source's scan comparison.
 - Jobs older than their expiry window are deactivated.
-- Non-USA jobs are excluded/deactivated.
+- Non-jobs across supported countries are excluded/deactivated.
 - New matching jobs can create WhatsApp alert queue entries for eligible opted-in users.
 
 ## User entitlement
@@ -234,7 +234,7 @@ The command catalog is intentionally deterministic. Future commands should be im
 - Never expose secrets to the client.
 - Validate admin/user authorization on protected API routes.
 - Keep employer Apply URLs intact.
-- Keep the USA-only filtering invariant.
+- Keep the 20-country filtering invariant.
 - Do not reintroduce the deleted legacy scanner architecture.
 - Do not reintroduce WhatsApp Cloud API sender code unless the product requirements explicitly change.
 - Keep WhatsApp delivery one-to-one; no broadcast/group automation.
@@ -274,3 +274,15 @@ Before changing code:
 8. Commit/push only when explicitly requested.
 
 The source of truth is the code in this repository plus `AI_START_HERE.md`; do not rely on an old chat transcript when the repository says otherwise.
+
+
+## Country-first marketplace
+
+The platform now supports 20 job markets: USA, UK, Canada, Australia, Germany, Netherlands, Ireland, France, Japan, Singapore, UAE, Saudi Arabia, New Zealand, Switzerland, Sweden, Norway, Denmark, Finland, Belgium and Austria.
+
+- Registration stores the user's preferred job country.
+- The homepage defaults to that country and allows switching country at any time.
+- Admin career sources are assigned to a country.
+- Career Agent scans and classifies jobs for the source country.
+- Public job search accepts a country filter.
+- Admin CRM includes country-aware source and user visibility.
