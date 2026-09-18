@@ -113,7 +113,7 @@ async function syncAllAutoSources(){
   for(const s of sources){
    try{
     const result=await syncSource(pool,s.id);
-    console.log("Auto sync",s.id,result.imported,"jobs imported");
+    console.log("Auto sync",s.id,JSON.stringify(result));
    }catch(e){
     await pool.query("UPDATE job_sources SET last_checked_at=NOW(),status='error' WHERE id=?",[s.id]);
     console.error("Auto sync failed",s.id,e.message);
