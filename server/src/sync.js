@@ -3,12 +3,12 @@ import { fetchJobs, normalizeJob, isUSAJob } from "./jobSources.js";
 export async function syncSource(pool,sourceId){
  const [rows]=await pool.query("SELECT s.*,c.name company FROM job_sources s JOIN companies c ON c.id=s.company_id WHERE s.id=? LIMIT 1",[sourceId]);
  if(!rows[0])throw Error("Source not found");
- const s=rows[0],raw=await fetchJobs(s.source_url,s.ats_type);let imported=0,skipped=0;const seen=new Set();
+ const s=rows[0],raw=await fetchJobs(s.source_url,s.ats_type);let imported=0,skipped=0,skippedMissing=0,skippedNoDate=0,skippedNonUS=0,skippedExpired=0;const seen=new Set();
  for(const rawJob of raw){
   const j=normalizeJob(rawJob);
-  if(!j.title||!j.applyUrl||!j.postedAt||!isUSAJob(j)){skipped++;continue}
+  if(!j.title||!j.applyUrl){skipped++;skippedMissing++;continue} if(!j.postedAt){skipped++;skippedNoDate++;continue} if(!isUSAJob(j)){skipped++;skippedNonUS++;continue}
   const posted=new Date(j.postedAt);if(Number.isNaN(posted.getTime())){skipped++;continue}
-  const expires=new Date(posted.getTime()+30*86400000);if(expires<=new Date()){skipped++;continue}
+  const expires=new Date(posted.getTime()+30*86400000);if(expires<=new Date()){skipped++;skippedExpired++;continue}
   const externalId=j.externalJobId||j.applyUrl;seen.add(externalId);
   const [r]=await pool.query(`INSERT INTO jobs(company_id,source_url,external_job_id,title,description,location,country,location_type,experience_level,category,apply_url,source_job_url,employment_type,posted_at,expires_at,is_active)
    VALUES(?,?,?,?,?,?, 'United States', ?,?,?,?,?,?,?,?,?,?)
@@ -20,5 +20,5 @@ export async function syncSource(pool,sourceId){
  }
  if(seen.size){const ids=[...seen],ph=ids.map(()=>"?").join(",");await pool.query(`UPDATE jobs SET is_active=0 WHERE company_id=? AND external_job_id IS NOT NULL AND external_job_id NOT IN (${ph}) AND posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)`,[s.company_id,...ids])}
  await pool.query("UPDATE job_sources SET last_checked_at=NOW(),status='active',last_sync_found=?,last_sync_imported=? WHERE id=?",[raw.length,imported,sourceId]);
- return {sourceId,found:raw.length,imported,skipped,policy:"Public index contains only currently published/open jobs with a valid published date, USA location, and age <=30 days"};
+ return {sourceId,found:raw.length,imported,skipped,diagnostics:{missing:skippedMissing,noDate:skippedNoDate,nonUSA:skippedNonUS,expired:skippedExpired},policy:"Public index contains only currently published/open jobs with a valid published date, USA location, and age <=30 days"};
 }
