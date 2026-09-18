@@ -12,7 +12,7 @@ async function request(url){const r=await fetch(url,{headers:{"User-Agent":"Tale
 async function requestPost(url,body){const r=await fetch(url,{method:"POST",headers:{"User-Agent":"TalentInspirations/1.0 (+public-career-indexer)","Content-Type":"application/json","Accept":"application/json"} ,body:JSON.stringify(body)});if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}
 function workdayInfo(url){
  const u=new URL(url);
- const m=u.hostname.match(/^(.+?)\\.wd(\\d+)\\.myworkdayjobs\\.com$/i);
+ const m=u.hostname.match(/^(.+?)\.wd(\d+)\.myworkdayjobs\.com$/i);
  if(!m)return null;
  const parts=u.pathname.split("/").filter(Boolean);
  const locale=/^[a-z]{2}-[A-Z]{2}$/i.test(parts[0]||"")?parts[0]:"en-US";
@@ -44,7 +44,7 @@ async function fetchWorkdayDetail(info,externalPath){
 function workdayRecent(value){
  const s=String(value||"").trim();if(!s)return false;
  if(/today|yesterday/i.test(s))return true;
- const m=s.match(/(\\d+)\\+?\\s+days?\\s+ago/i);
+ const m=s.match(/(\d+)\+?\s+days?\s+ago/i);
  if(m)return Number(m[1])<30;
  return false;
 }
@@ -66,7 +66,7 @@ async function fetchWorkdayJobs(sourceUrl){
     const externalPath=String(p.externalPath||p.url||"").trim();
     if(!externalPath||seen.has(externalPath)||!workdayRecent(p.postedOn||p.postedDate))continue;
     const listLocation=String(p.locationsText||"").trim();
-    if(!isUSA(listLocation,p.title||""))continue;
+    if(!isUSA(listLocation,`${p.title||""} ${p.bulletFields?.join?.(" ")||""}`))continue;
     seen.add(externalPath);
     const detail=await fetchWorkdayDetail(info,externalPath);
     const infoData=detail?.jobPostingInfo||detail?.jobPosting||detail||{};
