@@ -1,22 +1,30 @@
-import React,{useMemo,useState} from "react";
-import {Search,MapPin,BriefcaseBusiness,Share2,ExternalLink,Sparkles} from "lucide-react";
+import React,{useEffect,useState} from "react";
+import {Routes,Route,Link,useNavigate} from "react-router-dom";
+import {Search,MapPin,BriefcaseBusiness,Share2,ExternalLink,Sparkles,ShieldCheck,Plus,Trash2} from "lucide-react";
 
-const jobs=[
- {id:1,title:"Software Engineer",company:"Talent Inspirations Demo",location:"Charlotte, NC",mode:"Hybrid",level:"Experienced",posted:"2 days ago",skills:["Java","Spring Boot","AWS","Docker"],category:"Software Engineering",url:"#"},
- {id:2,title:"Junior DevOps Engineer",company:"Talent Inspirations Demo",location:"Remote - United States",mode:"Remote",level:"Fresher",posted:"4 days ago",skills:["Linux","AWS","Docker","Kubernetes"],category:"DevOps",url:"#"},
- {id:3,title:"Data Analyst",company:"Talent Inspirations Demo",location:"New York, NY",mode:"Onsite",level:"Fresher",posted:"8 days ago",skills:["SQL","Python","Excel","Power BI"],category:"Data",url:"#"}
+const API=import.meta.env.VITE_API_URL||"http://localhost:4000/api";
+const demo=[
+ {id:1,title:"Software Engineer",company:"Talent Inspirations Demo",location:"Charlotte, NC",location_type:"hybrid",experience_level:"experienced",category:"Software Engineering",posted_at:new Date(Date.now()-2*864e5),skills:["Java","Spring Boot","AWS","Docker"],apply_url:"#"},
+ {id:2,title:"Junior DevOps Engineer",company:"Talent Inspirations Demo",location:"Remote - United States",location_type:"remote",experience_level:"fresher",category:"DevOps",posted_at:new Date(Date.now()-4*864e5),skills:["Linux","AWS","Docker","Kubernetes"],apply_url:"#"},
+ {id:3,title:"Data Analyst",company:"Talent Inspirations Demo",location:"New York, NY",location_type:"onsite",experience_level:"fresher",category:"Data",posted_at:new Date(Date.now()-8*864e5),skills:["SQL","Python","Excel","Power BI"],apply_url:"#"}
 ];
 
-export default function App(){
- const [q,setQ]=useState(""); const [level,setLevel]=useState("All"); const [category,setCategory]=useState("All");
- const filtered=useMemo(()=>jobs.filter(j=>(level==="All"||j.level===level)&&(category==="All"||j.category===category)&&[j.title,j.company,j.location,j.category,...j.skills].join(" ").toLowerCase().includes(q.toLowerCase())),[q,level,category]);
- const share=async j=>{const text=`${j.title} at ${j.company} — ${location.origin}/jobs/${j.id}`; if(navigator.share) await navigator.share({title:j.title,text}); else await navigator.clipboard.writeText(text)};
- return <div className="app">
-  <nav><div className="brand"><span>TI</span><b>Talent Inspirations</b></div><a href="/admin">Admin</a></nav>
-  <header><div className="eyebrow">🇺🇸 USA CAREERS ONLY</div><h1>Find your next <em>opportunity.</em></h1><p>Fresh USA jobs for freshers and experienced professionals, curated from employer career pages.</p>
-   <div className="search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search job title, skill, company..."/></div>
-  </header>
-  <main><div className="toolbar"><select value={level} onChange={e=>setLevel(e.target.value)}><option>All</option><option>Fresher</option><option>Experienced</option></select><select value={category} onChange={e=>setCategory(e.target.value)}><option>All</option><option>Software Engineering</option><option>DevOps</option><option>Data</option></select><span>{filtered.length} jobs · last 30 days</span></div>
-  <section className="grid">{filtered.map(j=><article key={j.id}><div className="top"><div className="logo">TI</div><div><h2>{j.title}</h2><strong>{j.company}</strong></div><button onClick={()=>share(j)} aria-label="Share job"><Share2 size={18}/></button></div><div className="meta"><span><MapPin size={15}/>{j.location}</span><span><BriefcaseBusiness size={15}/>{j.mode}</span><span>{j.level}</span></div><p className="posted">Posted {j.posted} · USA only</p><h3><Sparkles size={16}/> Skills mentioned in this job</h3><div className="skills">{j.skills.map(s=><span key={s}>{s}</span>)}</div><div className="actions"><a href={j.url}>View Details</a><a className="apply" href={j.url}>Apply <ExternalLink size={15}/></a></div></article>)}</section></main>
- </div>
+function Home(){
+ const [jobs,setJobs]=useState(demo),[q,setQ]=useState(""),[level,setLevel]=useState(""),[cat,setCat]=useState("");
+ useEffect(()=>{fetch(`${API}/jobs?q=${encodeURIComponent(q)}&level=${level}&category=${encodeURIComponent(cat)}`).then(r=>r.ok?r.json():null).then(d=>{if(d?.jobs)setJobs(d.jobs)}).catch(()=>{})},[q,level,cat]);
+ const filtered=jobs.filter(j=>(level===""||j.experience_level===level)&&(cat===""||j.category===cat)&&[j.title,j.company,j.location,j.category,...(j.skills||[])].join(" ").toLowerCase().includes(q.toLowerCase()));
+ const share=async j=>{const url=`${location.origin}/jobs/${j.id}`;if(navigator.share)await navigator.share({title:j.title,text:`${j.title} at ${j.company}`,url});else await navigator.clipboard.writeText(url)};
+ return <><nav><div className="brand"><span>TI</span><b>Talent Inspirations</b></div><Link to="/admin">Admin</Link></nav><header><div className="eyebrow">🇺🇸 USA CAREERS ONLY</div><h1>Find your next <em>opportunity.</em></h1><p>Fresh USA jobs for freshers and experienced professionals, curated from employer career pages.</p><div className="search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search job title, skill, company..."/></div></header><main><div className="toolbar"><select value={level} onChange={e=>setLevel(e.target.value)}><option value="">All Experience</option><option value="fresher">Fresher</option><option value="experienced">Experienced</option></select><select value={cat} onChange={e=>setCat(e.target.value)}><option value="">All Categories</option><option>Software Engineering</option><option>DevOps</option><option>Data</option><option>Cybersecurity</option><option>QA</option><option>AI/ML</option></select><span>{filtered.length} USA jobs · latest 30 days</span></div><section className="grid">{filtered.map(j=><article key={j.id}><div className="top"><div className="logo">TI</div><div><h2>{j.title}</h2><strong>{j.company}</strong></div><button onClick={()=>share(j)}><Share2 size={18}/></button></div><div className="meta"><span><MapPin size={15}/>{j.location}</span><span><BriefcaseBusiness size={15}/>{j.location_type}</span><span>{j.experience_level}</span></div><p className="posted">Posted {j.posted_at?new Date(j.posted_at).toLocaleDateString():"Recently"} · USA only</p><h3><Sparkles size={16}/> Skills mentioned in this job</h3><div className="skills">{(j.skills||[]).map(s=><span key={s}>{s}</span>)}</div><div className="actions"><Link to={`/jobs/${j.id}`}>View Details</Link><a className="apply" href={j.apply_url} target="_blank" rel="noreferrer">Apply <ExternalLink size={15}/></a></div></article>)}</section></main></>
 }
+function Job({id}){return <main className="detail"><Link to="/">← All USA Jobs</Link><h1>Job #{id}</h1><p>Open the employer application to review the current job description and apply.</p></main>}
+function Admin(){
+ const [token,setToken]=useState(localStorage.getItem("ti_token")||""),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[companyName,setCompany]=useState(""),[careerUrl,setUrl]=useState(""),[sources,setSources]=useState([]),[msg,setMsg]=useState("");
+ const load=()=>token&&fetch(`${API}/admin/sources`,{headers:{Authorization:`Bearer ${token}`}}).then(r=>r.json()).then(d=>setSources(d.sources||[])).catch(()=>{});
+ useEffect(load,[token]);
+ const login=async e=>{e.preventDefault();const r=await fetch(`${API}/admin/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});const d=await r.json();if(d.token){localStorage.setItem("ti_token",d.token);setToken(d.token)}else setMsg(d.error||"Login failed")};
+ const add=async e=>{e.preventDefault();const r=await fetch(`${API}/admin/sources`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({companyName,careerUrl})});const d=await r.json();setMsg(d.message||d.error);if(r.ok){setCompany("");setUrl("");load()}};
+ if(!token)return <main className="admin"><Link to="/">← Website</Link><div className="panel"><ShieldCheck size={30}/><h1>Admin Login</h1><form onSubmit={login}><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Admin email"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password"/><button className="apply">Login</button></form><p>{msg}</p></div></main>;
+ return <main className="admin"><div className="adminhead"><div><Link to="/">← Website</Link><h1>Career Sources</h1></div><button onClick={()=>{localStorage.removeItem("ti_token");setToken("")}}>Logout</button></div><div className="panel"><h2><Plus/> Add USA Career Page</h2><form onSubmit={add}><input value={companyName} onChange={e=>setCompany(e.target.value)} placeholder="Company name" required/><input value={careerUrl} onChange={e=>setUrl(e.target.value)} placeholder="https://company.com/careers" type="url" required/><button className="apply">Add Source</button></form><p>{msg}</p></div><div className="panel"><h2>Sources</h2>{sources.map(s=><div className="source" key={s.id}><div><b>{s.company}</b><small>{s.source_url}</small></div><span>{s.status}</span></div>)}</div></main>
+}
+export default function App(){return <Routes><Route path="/" element={<Home/>}/><Route path="/jobs/:id" element={<JobRoute/>}/><Route path="/admin" element={<Admin/>}/></Routes>}
+function JobRoute(){const nav=useNavigate();const id=location.pathname.split("/").pop();return <Job id={id}/>};
