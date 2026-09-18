@@ -30,7 +30,7 @@ async function seedDefaultRecruitmentSources(){
    const [existing]=await pool.query("SELECT id FROM companies WHERE name=? LIMIT 1",[item.name]);
    let companyId;
    if(existing[0]) companyId=existing[0].id;
-   else {const [ins]=await pool.query("INSERT INTO companies(name,career_url,industry) VALUES(?,?,?)",[item.name,item.url,classifyIndustry(item.name,item.url)]);companyId=ins.insertId;}
+   else {const [ins]=await pool.query("INSERT INTO companies(name,career_url,industry) VALUES(?,?,?)",[item.name,item.url,classifyIndustry(item.name,item.url)]);companyId=ins.insertId;} await pool.query("UPDATE companies SET career_url=?,industry=? WHERE id=?",[item.url,classifyIndustry(item.name,item.url),companyId]);
    const [source]=await pool.query("SELECT id FROM job_sources WHERE company_id=? AND source_url=? LIMIT 1",[companyId,item.url]);
    if(!source[0]) await pool.query("INSERT INTO job_sources(company_id,source_url,ats_type,auto_sync) VALUES(?,?,?,?)",[companyId,item.url,detectSource(item.url),true]);
   }catch(e){console.error("Default source seed failed:",item.name,e.message)}
@@ -39,7 +39,7 @@ async function seedDefaultRecruitmentSources(){
 
 app.get("/api/meta",(req,res)=>res.json({ats:Object.values(ATS),industries:CATEGORIES,policy:{country:"United States",maxAgeDays:30}}));
 app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",scope:"USA-only",database:"connected"})}catch(e){res.status(503).json({ok:false,database:"unavailable"})}});
-app.get("/api/jobs",async(req,res)=>{try{const {q="",level="",category="",industry="",location="",companyId=""}=req.query;const where=["j.is_active=1","j.expires_at>NOW()","j.posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)","LOWER(j.country)='united states'"];const p=[];if(q){where.push("(j.title LIKE ? OR j.description LIKE ? OR j.location LIKE ? OR c.name LIKE ? OR EXISTS (SELECT 1 FROM job_skills qs WHERE qs.job_id=j.id AND qs.skill_name LIKE ?))");p.push("%"+q+"%","%"+q+"%","%"+q+"%","%"+q+"%","%"+q+"%")}if(level){where.push("LOWER(j.experience_level)=LOWER(?)");p.push(level)}if(category){where.push("LOWER(j.category)=LOWER(?)");p.push(category)}if(industry){where.push("LOWER(c.industry)=LOWER(?)");p.push(industry)}if(location){where.push("j.location LIKE ?");p.push("%"+location+"%")}if(companyId){where.push("j.company_id=?");p.push(companyId)}const [rows]=await pool.query("SELECT j.id,j.company_id,c.name company,c.industry,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.apply_url,j.source_job_url,j.posted_at,j.expires_at,COALESCE(JSON_ARRAYAGG(js.skill_name),JSON_ARRAY()) skills FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN job_skills js ON js.job_id=j.id WHERE "+where.join(" AND ")+" GROUP BY j.id ORDER BY j.posted_at DESC,j.id DESC",p);res.json({jobs:rows})}catch(e){res.status(500).json({error:e.message})}});
+app.get("/api/jobs",async(req,res)=>{try{const {q="",level="",category="",industry="",location="",companyId=""}=req.query;const where=["j.is_active=1","j.expires_at>NOW()","j.posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)","LOWER(j.country)='united states'"];const p=[];if(q){const term="%"+q.trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR EXISTS (SELECT 1 FROM job_skills qs WHERE qs.job_id=j.id AND LOWER(qs.skill_name) LIKE ?))");p.push(term,term,term,term,term)}if(level){where.push("LOWER(j.experience_level)=LOWER(?)");p.push(level)}if(category){where.push("LOWER(j.category)=LOWER(?)");p.push(category)}if(industry){where.push("LOWER(c.industry)=LOWER(?)");p.push(industry)}if(location){where.push("LOWER(j.location) LIKE ?");p.push("%"+location.trim().toLowerCase()+"%")}if(companyId){where.push("j.company_id=?");p.push(companyId)}const [rows]=await pool.query("SELECT j.id,j.company_id,c.name company,c.industry,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.apply_url,j.source_job_url,j.posted_at,j.expires_at,COALESCE(JSON_ARRAYAGG(js.skill_name),JSON_ARRAY()) skills FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN job_skills js ON js.job_id=j.id WHERE "+where.join(" AND ")+" GROUP BY j.id ORDER BY j.posted_at DESC,j.id DESC",p);res.json({jobs:rows})}catch(e){res.status(500).json({error:e.message})}});
 
 app.get("/api/jobs/:id",async(req,res)=>{try{const [rows]=await pool.query("SELECT j.*,c.name company,c.industry,c.career_url,s.ats_type,s.source_url,COALESCE(JSON_ARRAYAGG(js.skill_name),JSON_ARRAY()) skills FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN job_sources s ON s.company_id=j.company_id LEFT JOIN job_skills js ON js.job_id=j.id WHERE j.id=? AND j.is_active=1 AND j.expires_at>NOW() AND j.posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY) AND LOWER(j.country)='united states' GROUP BY j.id LIMIT 1",[req.params.id]);if(!rows[0])return res.status(404).json({error:"Job is no longer publicly available"});res.json({job:rows[0]})}catch(e){res.status(500).json({error:e.message})}});
 
@@ -104,7 +104,10 @@ app.delete("/api/admin/jobs/:id",auth,async(req,res)=>{const [r]=await pool.quer
 app.delete("/api/admin/sources/:id",auth,async(req,res)=>{await pool.query("DELETE FROM job_sources WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.post("/api/admin/cleanup",auth,async(req,res)=>{const [r]=await pool.query("UPDATE jobs SET is_active=0 WHERE expires_at<NOW() OR country<>'United States'");res.json({deactivated:r.affectedRows})});
 
+let syncRunning=false;
 async function syncAllAutoSources(){
+ if(syncRunning){console.log("Auto sync skipped: previous scan still running");return}
+ syncRunning=true;
  try{
   const [sources]=await pool.query("SELECT id FROM job_sources WHERE auto_sync=1 AND status<>'paused' ORDER BY id");
   for(const s of sources){
@@ -116,7 +119,7 @@ async function syncAllAutoSources(){
     console.error("Auto sync failed",s.id,e.message);
    }
   }
- }catch(e){console.error("Auto sync batch failed:",e.message)}
+ }catch(e){console.error("Auto sync batch failed:",e.message)} finally {syncRunning=false}
 }
 
 const port=process.env.PORT||4000;
@@ -124,6 +127,6 @@ seedDefaultRecruitmentSources().finally(()=>{
  app.listen(port,()=>{
   console.log(`Talent Inspirations API listening on ${port}`);
   syncAllAutoSources();
-  setInterval(syncAllAutoSources,6*60*60*1000);
+  setInterval(syncAllAutoSources,5*60*1000);
  });
 });
