@@ -1,8 +1,10 @@
 {
-  "name": "talent-inspirations",
-  "private": true,
-  "scripts": {
-    "lint": "echo 'lint placeholder - frontend/backend work starts next'",
-    "build": "echo 'build placeholder - frontend/backend work starts next'"
+  "name":"talent-inspirations",
+  "private":true,
+  "scripts":{
+    "lint":"npm --prefix client run lint",
+    "build":"npm --prefix client run build",
+    "server:start":"npm --prefix server start",
+    "sync":"npm --prefix server run sync"
   }
 }
