@@ -3,7 +3,7 @@ import { URL } from "node:url";
 
 const STATES=["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
 const STATE_CODES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","DC"];
-const NON_US=/\b(india|canada|united kingdom|germany|australia|singapore|ireland|france|spain|netherlands|brazil|philippines)\b/i;
+const COUNTRY_TERMS={USA:["united states","usa","u.s.","u.s.a."],UK:["united kingdom","uk","england","scotland","wales"],Canada:["canada"],Australia:["australia"],Germany:["germany"],Netherlands:["netherlands","holland"],Ireland:["ireland"],France:["france"],Japan:["japan"],Singapore:["singapore"],UAE:["united arab emirates","uae","dubai","abu dhabi"],"Saudi Arabia":["saudi arabia"],"New Zealand":["new zealand"],Switzerland:["switzerland"],Sweden:["sweden"],Norway:["norway"],Denmark:["denmark"],Finland:["finland"],Belgium:["belgium"],Austria:["austria"]};
 const SKILLS=["Java","Spring Boot","JavaScript","TypeScript","React","Angular","Python","SQL","MySQL","PostgreSQL","MongoDB","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Jenkins","GitHub Actions","Linux","Node.js","C#","C++","Go","Kafka","Power BI","Tableau","Excel","Selenium","Git","REST","GraphQL","PHP","Laravel","Snowflake","Databricks","Spark","Airflow","TensorFlow","PyTorch","R","Scala","Ruby","Rust","Swift","Oracle","SAP","Salesforce","ServiceNow"];
 
 function timeoutFetch(url,timeout=20000){
@@ -21,7 +21,17 @@ async function jsonFetch(url){
  return r.json();
 }
 function absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
-function isUSA(location="",description=""){
+function isSupportedLocation(location="",description="",country="USA"){
+ const text=String(location+" "+description).toLowerCase();
+ if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
+ if(country==="USA"){
+  if(/\b(united states|usa|u\.s\.)\b/i.test(location))return true;
+  if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(location)))return true;
+  if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(location)))return true;
+  return /remote/i.test(location)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
+ }
+ const terms=COUNTRY_TERMS[country]||[];
+ return terms.some(term=>new RegExp("\\b"+term.replace(/[.*+?^{}()|[\\]\\\\]/g,"\\\\function isUSA(location="",description=""){
  const text=String(location+" "+description);
  if(NON_US.test(text))return false;
  if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
@@ -29,7 +39,18 @@ function isUSA(location="",description=""){
  if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(location)))return true;
  if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(location)))return true;
  return /remote/i.test(location)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
+}")+"\\b","i").test(location)) ||
+   terms.some(term=>new RegExp("\\b"+term.replace(/[.*+?^{}()|[\\]\\\\]/g,"\\\\function isUSA(location="",description=""){
+ const text=String(location+" "+description);
+ if(NON_US.test(text))return false;
+ if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
+ if(/\b(united states|usa|u\.s\.)\b/i.test(location))return true;
+ if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(location)))return true;
+ if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(location)))return true;
+ return /remote/i.test(location)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
+}")+"\\b","i").test(text));
 }
+
 function cleanHtml(value=""){return String(value).replace(/<[^>]+>/g," ").replace(/&nbsp;/gi," ").replace(/\\s+/g," ").trim()}
 function parseDate(value){
  if(!value)return null;
@@ -153,7 +174,7 @@ async function fetchOne(url){
  });
  return {jobs:out.slice(0,250),ats:"generic"};
 }
-export async function scanCareerPage(url){
+export async function scanCareerPage(url,country="USA"){
  const result=await fetchOne(url);
  const now=new Date();
  return result.jobs.map(j=>{
@@ -174,6 +195,6 @@ export async function scanCareerPage(url){
    category:category(text),
    skills:skills(text)
   };
- }).filter(j=>j.title&&j.applyUrl&&isUSA(j.location,j.description));
+ }).filter(j=>j.title&&j.applyUrl&&isSupportedLocation(j.location,j.description,country));
 }
-export {isUSA};
+export {isSupportedLocation};
