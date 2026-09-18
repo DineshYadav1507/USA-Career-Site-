@@ -12,53 +12,72 @@ async function request(url){const r=await fetch(url,{headers:{"User-Agent":"Tale
 async function requestPost(url,body){const r=await fetch(url,{method:"POST",headers:{"User-Agent":"TalentInspirations/1.0 (+public-career-indexer)","Content-Type":"application/json","Accept":"application/json"} ,body:JSON.stringify(body)});if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()}
 function workdayInfo(url){
  const u=new URL(url);
- const m=u.hostname.match(/^(.+?)\\.wd\\d+\\.myworkdayjobs\\.com$/i);
+ const m=u.hostname.match(/^(.+?)\\.wd(\\d+)\\.myworkdayjobs\\.com$/i);
  if(!m)return null;
  const parts=u.pathname.split("/").filter(Boolean);
  const locale=/^[a-z]{2}-[A-Z]{2}$/i.test(parts[0]||"")?parts[0]:"en-US";
- const site=parts[1]||parts[0];
+ const site=/^[a-z]{2}-[A-Z]{2}$/i.test(parts[0]||"")?parts[1]:parts[0];
  if(!site)return null;
- return {origin:u.origin,tenant:m[1],locale,site};
+ return {origin:u.origin,tenant:m[1],shard:m[2],locale,site};
 }
 function workdayPostedDate(value){
  if(!value)return null;
- if(value instanceof Date)return value.toISOString();
  const s=String(value).trim();
+ const now=new Date();
+ if(/today/i.test(s))return now.toISOString();
+ if(/yesterday/i.test(s))return new Date(now.getTime()-86400000).toISOString();
+ const m=s.match(/(\\d+)\\+?\\s+days?\\s+ago/i);
+ if(m)return new Date(now.getTime()-Number(m[1])*86400000).toISOString();
  const direct=new Date(s);
- if(!Number.isNaN(direct.getTime()) && /\\d{4}/.test(s))return direct.toISOString();
- const m=s.match(/(?:posted\\s*)?(today|yesterday|\\d+\\+?\\s+days?\\s+ago)/i);
- if(!m)return null;
- const days=/today/i.test(m[1])?0:/yesterday/i.test(m[1])?1:Number.parseInt(m[1],10);
- if(!Number.isFinite(days))return null;
- return new Date(Date.now()-days*86400000).toISOString();
+ return Number.isNaN(direct.getTime())?null:direct.toISOString();
+}
+function workdayJobUrl(info,externalPath){
+ return new URL(`/${info.locale}/${info.site}${externalPath.startsWith("/")?externalPath:"/"+externalPath}`,info.origin).toString();
+}
+async function fetchWorkdayDetail(info,externalPath){
+ const path=externalPath.startsWith("/")?externalPath:"/"+externalPath;
+ const url=`${info.origin}/wday/cxs/${encodeURIComponent(info.tenant)}/${encodeURIComponent(info.site)}/job${path}`;
+ const r=await fetch(url,{headers:{"User-Agent":"TalentInspirations/1.0 (+public-career-indexer)","Accept":"application/json","Accept-Language":"en-US,en;q=0.9","Referer":`${info.origin}/${info.locale}/${info.site}`}});
+ if(!r.ok)return null;
+ try{return await r.json()}catch{return null}
 }
 async function fetchWorkdayJobs(sourceUrl){
- const info=workdayInfo(sourceUrl);if(!info)return [];
+ const info=workdayInfo(sourceUrl);if(!info)throw Error("Invalid Workday career URL. Expected tenant.wdN.myworkdayjobs.com/.../site");
  const endpoint=`${info.origin}/wday/cxs/${encodeURIComponent(info.tenant)}/${encodeURIComponent(info.site)}/jobs`;
- const out=[];
- for(let offset=0;offset<200;offset+=20){
+ const out=[];let offset=0;let total=null;
+ while(offset<2000){
   const data=await requestPost(endpoint,{appliedFacets:{},limit:20,offset,searchText:""});
+  if(total===null)total=Number(data.total)||0;
   const postings=Array.isArray(data.jobPostings)?data.jobPostings:[];
-  for(const j of postings){
-   const path=j.externalPath||j.url||"";
-   const applyUrl=path?new URL(path,sourceUrl).toString():sourceUrl;
-   const locations=Array.isArray(j.locationsText)?j.locationsText.join(", "):(j.locationsText||j.location||"");
-   const description=[j.jobDescription,j.description,Array.isArray(j.bulletFields)?j.bulletFields.join(" • "):j.bulletFields].filter(Boolean).join("\n");
-   out.push({externalJobId:j.bulletFields?.find?.(x=>/^JR[-\\w]+$/i.test(String(x)))||j.externalPath||j.jobReqId||applyUrl,title:j.title||"",description,location:locations,applyUrl,postedAt:workdayPostedDate(j.postedOn||j.postedDate||j.createdOn),employmentType:j.employmentType,locationType:/remote/i.test(`${locations} ${description}`)?"remote":"unknown"});
+  if(!postings.length)break;
+  for(const p of postings){
+   const externalPath=String(p.externalPath||p.url||"").trim();if(!externalPath)continue;
+   const detail=await fetchWorkdayDetail(info,externalPath);
+   const infoData=detail?.jobPostingInfo||detail?.jobPosting||detail||{};
+   const locationParts=[
+    p.locationsText,
+    infoData.location?.descriptor,
+    infoData.jobRequisitionLocation?.descriptor,
+    infoData.country?.descriptor
+   ].filter(Boolean);
+   const location=[...new Set(locationParts.map(x=>String(x).trim()).filter(Boolean))].join(", ");
+   const description=infoData.jobDescription||infoData.description||"";
+   const posted=workdayPostedDate(p.postedOn||p.postedDate);
+   const applyUrl=workdayJobUrl(info,externalPath);
+   out.push({
+    externalJobId:infoData.jobReqId||p.bulletFields?.find?.(x=>/^(JR|R)-?\\w+$/i.test(String(x)))||externalPath,
+    title:p.title||infoData.title||"",
+    description,
+    location,
+    applyUrl,
+    postedAt:posted,
+    employmentType:infoData.timeType||infoData.employmentType||"",
+    locationType:/remote/i.test(`${location} ${description}`)?"remote":"unknown"
+   });
   }
-  if(postings.length<20)break;
+  offset+=postings.length;
+  if(postings.length<20 || (total>0&&offset>=total))break;
  }
  return out;
-}
-function greenhouseToken(url){const u=new URL(url);const p=u.pathname.split("/").filter(Boolean);return u.hostname.includes("greenhouse.io")?p[0]||null:null}
-function leverSite(url){const u=new URL(url);const p=u.pathname.split("/").filter(Boolean);return u.hostname==="jobs.lever.co"?p[0]||null:null}
-function jsonLdJobs(html){const $=cheerio.load(html),out=[];$('script[type="application/ld+json"]').each((_,el)=>{try{const data=JSON.parse($(el).text()),list=Array.isArray(data)?data:[data];for(const x of list){for(const j of x["@graph"]||[x]){if(j["@type"]==="JobPosting"&&j.url&&j.title&&j.datePosted)out.push({externalJobId:j.identifier?.value||j.identifier||j.url,title:j.title,description:j.description||"",location:[j.jobLocation?.address?.addressLocality,j.jobLocation?.address?.addressRegion,j.jobLocation?.address?.addressCountry].filter(Boolean).join(", ")||j.jobLocationType||"",applyUrl:j.url,postedAt:j.datePosted,employmentType:j.employmentType,locationType:/TELECOMMUTE|remote/i.test(JSON.stringify(j.jobLocationType||""))?"remote":"unknown"})}}}catch{}});return out}
-export async function fetchJobs(sourceUrl,atsType){
- if(atsType==="workday"){return fetchWorkdayJobs(sourceUrl)}
- const gh=greenhouseToken(sourceUrl);if(gh){const data=await request(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(gh)}/jobs?content=true`);return(data.jobs||[]).map(j=>({externalJobId:String(j.id),title:j.title,description:j.content||"",location:j.location?.name||"",applyUrl:j.absolute_url,postedAt:j.updated_at,locationType:/remote/i.test(j.location?.name||"")?"remote":"unknown"}))}
- const lever=leverSite(sourceUrl);if(lever){const data=await request(`https://api.lever.co/v0/postings/${encodeURIComponent(lever)}?mode=json`);return(data||[]).map(j=>({externalJobId:String(j.id),title:j.text,description:j.descriptionPlain||j.description||"",location:j.categories?.location||j.categories?.allLocations?.join(", ")||"",applyUrl:j.hostedUrl||j.applyUrl,postedAt:j.createdAt||j.updatedAt,employmentType:j.categories?.commitment,locationType:/remote/i.test(j.categories?.location||"")?"remote":"unknown"}))}
- const html=await(await fetch(sourceUrl,{headers:{"User-Agent":"TalentInspirations/1.0 (+public-career-indexer)"}})).text();const jsonLd=jsonLdJobs(html);if(jsonLd.length)return jsonLd;
- const $=cheerio.load(html),out=[];$("a[href]").each((_,a)=>{const title=$(a).text(" ").replace(/\s+/g," ").trim(),href=absolute(sourceUrl,$(a).attr("href"));if(title.length>5&&/(engineer|developer|analyst|scientist|manager|designer|intern|devops|software|data|security)/i.test(title))out.push({externalJobId:href,title,description:"",location:"",applyUrl:href,postedAt:null,locationType:"unknown"})});return out.slice(0,200)
-}
-export function normalizeJob(j){const text=`${j.title||""} ${j.description||""} ${j.location||""}`;return{...j,experienceLevel:parseExperience(text),category:parseCategory(text),skills:skills(text)}}
+}export function normalizeJob(j){const text=`${j.title||""} ${j.description||""} ${j.location||""}`;return{...j,experienceLevel:parseExperience(text),category:parseCategory(text),skills:skills(text)}}
 export function isUSAJob(j){return isUSA(j.location,j.description)}
