@@ -44,40 +44,39 @@ async function fetchWorkdayDetail(info,externalPath){
 async function fetchWorkdayJobs(sourceUrl){
  const info=workdayInfo(sourceUrl);if(!info)throw Error("Invalid Workday career URL. Expected tenant.wdN.myworkdayjobs.com/.../site");
  const endpoint=`${info.origin}/wday/cxs/${encodeURIComponent(info.tenant)}/${encodeURIComponent(info.site)}/jobs`;
- const out=[];let offset=0;let total=null;
- while(offset<2000){
-  const data=await requestPost(endpoint,{appliedFacets:{},limit:20,offset,searchText:""});
-  if(total===null)total=Number(data.total)||0;
-  const postings=Array.isArray(data.jobPostings)?data.jobPostings:[];
-  if(!postings.length)break;
-  for(const p of postings){
-   const externalPath=String(p.externalPath||p.url||"").trim();if(!externalPath)continue;
-   const detail=await fetchWorkdayDetail(info,externalPath);
-   const infoData=detail?.jobPostingInfo||detail?.jobPosting||detail||{};
-   const locationParts=[
-    p.locationsText,
-    infoData.location?.descriptor,
-    infoData.jobRequisitionLocation?.descriptor,
-    infoData.country?.descriptor
-   ].filter(Boolean);
-   const location=[...new Set(locationParts.map(x=>String(x).trim()).filter(Boolean))].join(", ");
-   const description=infoData.jobDescription||infoData.description||"";
-   const posted=workdayPostedDate(p.postedOn||p.postedDate);
-   const applyUrl=workdayJobUrl(info,externalPath);
-   out.push({
-    externalJobId:infoData.jobReqId||p.bulletFields?.find?.(x=>/^(JR|R)-?\\w+$/i.test(String(x)))||externalPath,
-    title:p.title||infoData.title||"",
-    description,
-    location,
-    applyUrl,
-    postedAt:posted,
-    employmentType:infoData.timeType||infoData.employmentType||"",
-    locationType:/remote/i.test(`${location} ${description}`)?"remote":"unknown"
-   });
+ const out=[];const seen=new Set();
+ for(const searchText of ["United States","USA","US"]){
+  let offset=0;let total=null;
+  while(offset<1000){
+   const data=await requestPost(endpoint,{appliedFacets:{},limit:20,offset,searchText});
+   if(total===null)total=Number(data.total)||0;
+   const postings=Array.isArray(data.jobPostings)?data.jobPostings:[];
+   if(!postings.length)break;
+   for(const p of postings){
+    const externalPath=String(p.externalPath||p.url||"").trim();if(!externalPath||seen.has(externalPath))continue;
+    seen.add(externalPath);
+    const detail=await fetchWorkdayDetail(info,externalPath);
+    const infoData=detail?.jobPostingInfo||detail?.jobPosting||detail||{};
+    const extra=Array.isArray(infoData.additionalLocations)?infoData.additionalLocations.map(x=>x?.descriptor||x?.name||x).join(", "):"";
+    const locationParts=[p.locationsText,infoData.location?.descriptor,infoData.jobRequisitionLocation?.descriptor,infoData.country?.descriptor,extra].filter(Boolean);
+    const location=[...new Set(locationParts.map(x=>String(x).trim()).filter(Boolean))].join(", ");
+    const description=infoData.jobDescription||infoData.description||"";
+    out.push({
+      externalJobId:infoData.jobReqId||p.bulletFields?.find?.(x=>/^(JR|R)-?\\w+$/i.test(String(x)))||externalPath,
+      title:p.title||infoData.title||"",
+      description,
+      location,
+      applyUrl:workdayJobUrl(info,externalPath),
+      postedAt:workdayPostedDate(p.postedOn||p.postedDate),
+      employmentType:infoData.timeType||infoData.employmentType||"",
+      locationType:/remote/i.test(`${location} ${description}`)?"remote":"unknown"
+    });
+   }
+   offset+=postings.length;
+   if(postings.length<20 || (total>0&&offset>=total))break;
   }
-  offset+=postings.length;
-  if(postings.length<20 || (total>0&&offset>=total))break;
  }
  return out;
-}export function normalizeJob(j){const text=`${j.title||""} ${j.description||""} ${j.location||""}`;return{...j,experienceLevel:parseExperience(text),category:parseCategory(text),skills:skills(text)}}
+}
+export function normalizeJob(j){const text=`${j.title||""} ${j.description||""} ${j.location||""}`;return{...j,experienceLevel:parseExperience(text),category:parseCategory(text),skills:skills(text)}}
 export function isUSAJob(j){return isUSA(j.location,j.description)}
