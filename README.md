@@ -9,7 +9,8 @@ USA-only career intelligence platform.
 - Public Greenhouse, Lever and Workday feeds are detected when exposed by a career page; JSON-LD JobPosting is also supported.
 - Skill mapping extracts common engineering, data, cloud and security skills.
 - User alerts support role, category, industry, location and skill filters.
-- WhatsApp alerts are ready for Meta WhatsApp Cloud API.
+- WhatsApp alerts use whatsapp-web.js with a persistent LocalAuth session, QR login, opt-in individual delivery, randomized queue delays, per-recipient cooldown and daily safety limits.
+- Incoming WhatsApp questions are answered from the website's plan, benefits, filters, alerts and Career Agent knowledge. No broadcast/group messaging is used by the application.
 - Stripe Checkout subscription foundation is included.
 - Admin grants let selected users remain free for any period or indefinitely.
 - Admin Agent Chat supports commands such as 'add all healthcare career links'.
