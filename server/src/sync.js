@@ -18,7 +18,7 @@ export async function syncSource(pool,sourceId){
   if(jobId){await pool.query("DELETE FROM job_skills WHERE job_id=?",[jobId]);for(const skill of j.skills)await pool.query("INSERT IGNORE INTO job_skills(job_id,skill_name) VALUES(?,?)",[jobId,skill])}
   imported++;
  }
- if(seen.size){const ids=[...seen],ph=ids.map(()=>"?").join(",");await pool.query(`UPDATE jobs SET is_active=0 WHERE company_id=? AND external_job_id IS NOT NULL AND external_job_id NOT IN (${ph}) AND posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)`,[s.company_id,...ids])}
+ if(seen.size){const ids=[...seen],ph=ids.map(()=>"?").join(",");await pool.query(`UPDATE jobs SET is_active=0 WHERE company_id=? AND external_job_id IS NOT NULL AND external_job_id NOT LIKE 'manual:%' AND external_job_id NOT IN (${ph}) AND posted_at>=DATE_SUB(NOW(),INTERVAL 30 DAY)`,[s.company_id,...ids])}
  await pool.query("UPDATE job_sources SET last_checked_at=NOW(),status='active',last_sync_found=?,last_sync_imported=? WHERE id=?",[raw.length,imported,sourceId]);
  return {sourceId,found:raw.length,imported,skipped,diagnostics:{missing:skippedMissing,noDate:skippedNoDate,nonUSA:skippedNonUS,expired:skippedExpired},policy:"Public index contains only currently published/open jobs with a valid published date, USA location, and age <=30 days"};
 }
