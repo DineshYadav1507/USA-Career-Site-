@@ -13,6 +13,8 @@ class WhatsAppEngine extends EventEmitter{
   this.minDelayMs=Number(process.env.WA_MIN_DELAY_MS||45000);
   this.maxDelayMs=Number(process.env.WA_MAX_DELAY_MS||180000);
   this.dailyLimit=Number(process.env.WA_DAILY_LIMIT||80);
+  this.recipientCooldownMs=Number(process.env.WA_RECIPIENT_COOLDOWN_MS||600000);
+  this.lastRecipientSent=new Map();
   this.sentToday=0;
   this.dayKey=new Date().toISOString().slice(0,10);
   this.client=new Client({
@@ -43,11 +45,15 @@ class WhatsAppEngine extends EventEmitter{
     const now=Date.now();
     const wait=Math.max(0,this.lastSentAt+this.randomDelay()-now);
     if(wait)await new Promise(r=>setTimeout(r,wait));
+    const lastRecipient=this.lastRecipientSent.get(item.to)||0;
+    const recipientWait=Math.max(0,lastRecipient+this.recipientCooldownMs-Date.now());
+    if(recipientWait)await new Promise(r=>setTimeout(r,recipientWait));
     const chatId=item.to+"@c.us";
     const exists=await this.client.isRegisteredUser(chatId).catch(()=>false);
     if(!exists){console.warn("WhatsApp number is not registered:",item.to);continue}
     await this.client.sendMessage(chatId,item.text);
     this.lastSentAt=Date.now();
+    this.lastRecipientSent.set(item.to,this.lastSentAt);
     this.sentToday++;
     this.emit("sent",item);
    }
