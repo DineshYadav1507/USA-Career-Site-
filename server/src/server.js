@@ -5,7 +5,7 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import {scanCareerPage} from "./careerAgent.js";
-import {sendWhatsApp} from "./whatsapp.js";
+import {whatsapp} from "./whatsappWeb.js";
 import {createCheckout,constructWebhook,billingConfigured} from "./billing.js";
 
 const app=express();
@@ -68,9 +68,9 @@ async function notifyMatchingUsers(job){
   if(!entitled(a))continue;
   const msg=`🇺🇸 New USA Job Alert\n\n${job.title}\n${job.company}\n${job.location||"USA"}\nCategory: ${job.category}\nSkills: ${(job.skills||[]).slice(0,8).join(", ")||"See job details"}\n\nApply: ${job.apply_url}\n\nTalent Inspirations`;
   try{
-   const result=await sendWhatsApp({phone:normalizePhone(a.whatsapp_number),text:msg});
-   const status=result.ok?"sent":"queued";
-   await pool.query("INSERT INTO whatsapp_messages(user_id,job_id,phone,message_text,provider_message_id,status,error_text,sent_at) VALUES(?,?,?,?,?,?,?,?)",[a.user_id,job.id,a.whatsapp_number,msg,result.id||null,status,result.reason||null,result.ok?new Date():null]);
+   const result=await whatsapp.send(normalizePhone(a.whatsapp_number),msg,{type:"job_alert",jobId:job.id,alertId:a.id});
+   const status="queued";
+   await pool.query("INSERT INTO whatsapp_messages(user_id,job_id,phone,message_text,provider_message_id,status,error_text,sent_at) VALUES(?,?,?,?,?,?,?,?)",[a.user_id,job.id,a.whatsapp_number,msg,null,status,null,null]);
    await pool.query("UPDATE job_alerts SET last_sent_at=NOW() WHERE id=?",[a.id]);
   }catch(e){
    await pool.query("INSERT INTO whatsapp_messages(user_id,job_id,phone,message_text,status,error_text) VALUES(?,?,?,?,?,?)",[a.user_id,job.id,a.whatsapp_number,msg,"failed",e.message]);
@@ -159,8 +159,8 @@ app.post("/api/billing/webhook",express.raw({type:"application/json"}),async(req
 });
 app.use(express.json({limit:"2mb"}));
 
-app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",database:"connected",agent:"5-minute-career-agent"})}catch(e){res.status(503).json({ok:false,error:e.message})}});
-app.get("/api/meta",(req,res)=>res.json({industries:INDUSTRIES,categories:CATEGORIES,dateWindows:[3,7,15,30],features:["Career Agent","WhatsApp Alerts","Subscriptions","Admin Grants"]}));
+app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",database:"connected",agent:"5-minute-career-agent",whatsapp:whatsapp.status()})}catch(e){res.status(503).json({ok:false,error:e.message})}});
+app.get("/api/meta",(req,res)=>res.json({industries:INDUSTRIES,categories:CATEGORIES,dateWindows:[3,7,15,30],features:["Career Agent","WhatsApp Web JS Alerts","Website Q&A Bot","Subscriptions","Admin Grants"]}));
 
 app.get("/api/jobs",async(req,res)=>{
  try{
@@ -183,6 +183,7 @@ app.get("/api/jobs/:id",async(req,res)=>{
 });
 app.get("/api/companies/:id",async(req,res)=>{const [rows]=await pool.query("SELECT c.*,COUNT(j.id) current_hiring FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) WHERE c.id=? GROUP BY c.id",[req.params.id]);if(!rows[0])return res.status(404).json({error:"Company not found"});res.json({company:rows[0]})});
 app.get("/api/companies/:id/jobs",async(req,res)=>{const [jobs]=await pool.query("SELECT j.*,c.name company,c.industry FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.company_id=? AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) ORDER BY COALESCE(j.posted_at,j.first_seen_at) DESC",[req.params.id]);jobs.forEach(j=>{try{j.skills=JSON.parse(j.skills_json||"[]")}catch{j.skills=[]}delete j.skills_json});res.json({jobs})});
+app.post("/api/bot/answer",async(req,res)=>{try{res.json({answer:await websiteAnswer(req.body?.question)})}catch(e){res.status(500).json({error:e.message})}});
 app.get("/api/industries",async(req,res)=>{const [rows]=await pool.query("SELECT c.industry,COUNT(j.id) current_jobs FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) GROUP BY c.industry ORDER BY current_jobs DESC");res.json({industries:rows})});
 
 app.post("/api/auth/register",async(req,res)=>{try{const{name="",email, password,whatsappNumber=""}=req.body||{};if(!email||!password)return res.status(400).json({error:"Email and password are required"});const hash=await bcrypt.hash(password,12);const phone=normalizePhone(whatsappNumber);const [r]=await pool.query("INSERT INTO users(name,email,password_hash,whatsapp_number) VALUES(?,?,?,?)",[name,email.toLowerCase(),hash,phone||null]);res.json({token:tokenFor({type:"user",id:r.insertId}),user:{id:r.insertId,name,email,whatsapp_number:phone}})}catch(e){res.status(400).json({error:e.code==="ER_DUP_ENTRY"?"Email already registered":e.message})}});
@@ -208,6 +209,7 @@ const HEALTHCARE=[
  ["Elevance Health","https://careers.elevancehealth.com/jobs"],
  ["HCA Healthcare","https://careers.hcahealthcare.com/"]
 ];
+app.get("/api/admin/whatsapp",adminAuth,(req,res)=>res.json(whatsapp.status()));
 app.post("/api/admin/agent-command",adminAuth,async(req,res)=>{
  const command=String(req.body?.command||"").trim().toLowerCase();
  if(!command)return res.status(400).json({error:"Command is required"});
@@ -225,6 +227,16 @@ app.post("/api/admin/users/:id/grant",adminAuth,async(req,res)=>{const until=req
 app.post("/api/admin/users/:id/revoke",adminAuth,async(req,res)=>{await pool.query("UPDATE users SET plan='free',grant_until=NULL WHERE id=?",[req.params.id]);res.json({ok:true})});
 app.get("/api/admin/alerts",adminAuth,async(req,res)=>{const [rows]=await pool.query("SELECT a.*,u.email,u.whatsapp_number,u.plan FROM job_alerts a JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 500");res.json({alerts:rows})});
 
+const websiteAnswer=async question=>{
+ const q=String(question||"").toLowerCase();
+ if(/plan|pricing|price|subscription|pro/.test(q))return "Talent Inspirations has a free job-search experience and a Pro subscription for personalized job alerts and WhatsApp delivery. Admin-granted users can receive free access for a period chosen by the admin.";
+ if(/benefit|feature|what.*get|why.*pro/.test(q))return "Pro is designed for personalized job alerts: role, category, industry, location and skills. Matching new USA jobs can be delivered through WhatsApp when the user opts in.";
+ if(/3.*day|7.*day|15.*day|30.*day|recent|latest/.test(q))return "You can filter live USA jobs by Last 3 Days, Last 1 Week, Last 15 Days or Last 30 Days.";
+ if(/usa|united states|location/.test(q))return "Talent Inspirations is a USA-only job index. The Career Agent keeps active employer listings and filters out non-USA locations.";
+ if(/alert|notification|whatsapp/.test(q))return "Users can create alerts using role, category, industry, location and skills. WhatsApp delivery requires opt-in and is sent individually, not as a broadcast.";
+ if(/career agent|agent|how.*work|scan/.test(q))return "The Career Agent scans admin-added public career pages every 5 minutes, detects supported public ATS feeds or structured job data, maps skills and maintains the active USA job index.";
+ return "I can answer questions about Talent Inspirations plans, benefits, job filters, USA jobs, alerts, WhatsApp delivery and how the Career Agent works.";
+};
 const seed=async()=>{
  const count=(await pool.query("SELECT COUNT(*) n FROM career_sources"))[0][0].n;
  if(count===0){
@@ -233,4 +245,4 @@ const seed=async()=>{
  }
 };
 await seed();
-app.listen(PORT,()=>{console.log(`Talent Inspirations API listening on ${PORT}`);scanAll();setInterval(scanAll,5*60*1000)});
+app.listen(PORT,async()=>{console.log(`Talent Inspirations API listening on ${PORT}`);whatsapp.start().catch(e=>console.error("WhatsApp Web startup:",e.message));scanAll();setInterval(scanAll,5*60*1000)});
