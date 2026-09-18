@@ -168,7 +168,7 @@ app.get("/api/meta",(req,res)=>res.json({countries:COUNTRIES.map(code=>({code,na
 app.get("/api/jobs",async(req,res)=>{
  try{
   const days=[3,7,15,30].includes(Number(req.query.days))?Number(req.query.days):30;
-  const p=[];const where=[`j.is_active=1`,"j.country IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")","j.expires_at>NOW()",`COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL ${days} DAY)`];
+  const p=[];const where=[`j.is_active=1`,`j.country IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")`,"j.expires_at>NOW()",`COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL ${days} DAY)`];
   if(req.query.country){const c=normalizeCountry(req.query.country);where.push("j.country=?");p.push(c)}
   if(req.query.q){const t="%"+String(req.query.q).trim().toLowerCase()+"%";where.push("(LOWER(j.title) LIKE ? OR LOWER(j.description) LIKE ? OR LOWER(j.location) LIKE ? OR LOWER(c.name) LIKE ? OR LOWER(j.category) LIKE ? OR LOWER(CAST(j.skills_json AS CHAR)) LIKE ?)");p.push(t,t,t,t,t,t)}
   if(req.query.category){where.push("j.category=?");p.push(req.query.category)}
