@@ -2,8 +2,7 @@ import * as cheerio from "cheerio";
 import { URL } from "node:url";
 const usStates=["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
 const nonUs=/\b(india|canada|united kingdom|uk|germany|australia|singapore|ireland|france|spain|netherlands|brazil)\b/i;
-export function isUSA(location="",description=""){const s=`${location} ${description}`;if(nonUs.test(s))return false;if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(s))return false;return /\b(united states|usa|u\.?s\.?)\b/i.test(location)||usStates.some(x=>new RegExp(`\\b${x}\\b`,"i").test(location))||( /remote/i.test(location)&&/\b(united states|usa|u\.?s\.?)\b/i.test(s));}
-function absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
+export function isUSA(location="",description=""){const loc=String(location||"");const desc=String(description||"");if(nonUs.test(loc))return false;if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(loc))return false;if(/\b(united states|usa|u\.?s\.?)\b/i.test(loc)||usStates.some(x=>new RegExp(`\\b${x}\\b`,"i").test(loc)))return true;if(/remote/i.test(loc))return /\b(united states|usa|u\.?s\.?)\b/i.test(desc)&&!nonUs.test(desc);return false;}\nfunction absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
 function parseExperience(t){if(/\b(intern|internship|new grad|entry[- ]level|fresher|graduate)\b|\b0\s*[-–to]?\s*1\s*years?\b/i.test(t))return"fresher";if(/\b(senior|lead|principal|manager|\d+\+?\s*years?)\b/i.test(t))return"experienced";return"other"}
 function parseCategory(t){const s=t.toLowerCase();if(/devops|sre|kubernetes|terraform|cloud engineer/.test(s))return"DevOps";if(/data analyst|data scientist|analytics|business intelligence/.test(s))return"Data";if(/cyber|security engineer|infosec/.test(s))return"Cybersecurity";if(/qa|quality assurance|test engineer/.test(s))return"QA";if(/machine learning|ai engineer|ml engineer/.test(s))return"AI/ML";return"Software Engineering"}
 const skillCatalog=["Java","Spring Boot","JavaScript","TypeScript","React","Angular","Python","SQL","MySQL","PostgreSQL","MongoDB","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Jenkins","GitHub Actions","Linux","Node.js","C#","C++","Go","Kafka","Power BI","Tableau","Excel","Selenium","Git","REST","GraphQL","PHP","Laravel"];
@@ -41,19 +40,32 @@ async function fetchWorkdayDetail(info,externalPath){
  if(!r.ok)return null;
  try{return await r.json()}catch{return null}
 }
+function workdayRecent(value){
+ const s=String(value||"").trim();if(!s)return false;
+ if(/today|yesterday/i.test(s))return true;
+ const m=s.match(/(\\d+)\\+?\\s+days?\\s+ago/i);
+ if(m)return Number(m[1])<30;
+ return false;
+}
 async function fetchWorkdayJobs(sourceUrl){
  const info=workdayInfo(sourceUrl);if(!info)throw Error("Invalid Workday career URL. Expected tenant.wdN.myworkdayjobs.com/.../site");
  const endpoint=`${info.origin}/wday/cxs/${encodeURIComponent(info.tenant)}/${encodeURIComponent(info.site)}/jobs`;
  const out=[];const seen=new Set();
- for(const searchText of ["United States","USA","US"]){
+ // Search the public Workday feed for USA terms. Only recent listings are
+ // expanded with the detail request; this avoids thousands of unnecessary
+ // detail calls for old/closed postings.
+ for(const searchText of ["United States","USA"]){
   let offset=0;let total=null;
-  while(offset<1000){
+  while(offset<2000){
    const data=await requestPost(endpoint,{appliedFacets:{},limit:20,offset,searchText});
    if(total===null)total=Number(data.total)||0;
    const postings=Array.isArray(data.jobPostings)?data.jobPostings:[];
    if(!postings.length)break;
    for(const p of postings){
-    const externalPath=String(p.externalPath||p.url||"").trim();if(!externalPath||seen.has(externalPath))continue;
+    const externalPath=String(p.externalPath||p.url||"").trim();
+    if(!externalPath||seen.has(externalPath)||!workdayRecent(p.postedOn||p.postedDate))continue;
+    const listLocation=String(p.locationsText||"").trim();
+    if(!isUSA(listLocation,p.title||""))continue;
     seen.add(externalPath);
     const detail=await fetchWorkdayDetail(info,externalPath);
     const infoData=detail?.jobPostingInfo||detail?.jobPosting||detail||{};
@@ -73,7 +85,7 @@ async function fetchWorkdayJobs(sourceUrl){
     });
    }
    offset+=postings.length;
-   if(postings.length<20 || (total>0&&offset>=total))break;
+   if(postings.length<20 || (total>0&&offset>=Math.min(total,2000)))break;
   }
  }
  return out;
