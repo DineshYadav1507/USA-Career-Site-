@@ -22,5 +22,6 @@ export const DEFAULT_RECRUITMENT_SOURCES=[
 {name:"Apollo Technical",url:"https://www.apollotechnical.com/careers-engineering-it/"},
 {name:"Tiger Recruitment",url:"https://tiger-recruitment.com/us/finance/jobs/"},
 {name:"H.I.M. Recruiters",url:"https://www.himjobs.com/"},
-{name:"ISG Partners",url:"https://isgpartners.com/jobs/"}
+{name:"ISG Partners",url:"https://isgpartners.com/jobs/"},
+{name:"Walmart",url:"https://walmart.wd504.myworkdayjobs.com/en-US/WalmartExternal"}
 ];
