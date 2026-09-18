@@ -94,7 +94,7 @@ async function fetchWorkdayJobs(sourceUrl){
  }
  return out;
 }
-function greenhouseToken(url){const u=new URL(url);const p=u.pathname.split("/").filter(Boolean);if(!u.hostname.includes("greenhouse.io"))return null;if(p[0]&&p[0]!=="embed")return p[0];return u.searchParams.get("for")||u.searchParams.get("board")||null}
+function greenhouseToken(url){const u=new URL(url);const p=u.pathname.split("/").filter(Boolean);if(!u.hostname.includes("greenhouse.io"))return null;if(p[0]&&p[0]!=="embed"&&p[0]!=="embed/job_app")return p[0];return u.searchParams.get("for")||u.searchParams.get("board")||null}
 function leverSite(url){const u=new URL(url);const p=u.pathname.split("/").filter(Boolean);return u.hostname==="jobs.lever.co"?p[0]||null:null}
 function jsonLdJobs(html){const $=cheerio.load(html),out=[];$('script[type="application/ld+json"]').each((_,el)=>{try{const data=JSON.parse($(el).text()),list=Array.isArray(data)?data:[data];for(const x of list){for(const j of x["@graph"]||[x]){if(j["@type"]==="JobPosting"&&j.url&&j.title&&j.datePosted)out.push({externalJobId:j.identifier?.value||j.identifier||j.url,title:j.title,description:j.description||"",location:[j.jobLocation?.address?.addressLocality,j.jobLocation?.address?.addressRegion,j.jobLocation?.address?.addressCountry].filter(Boolean).join(", ")||j.jobLocationType||"",applyUrl:j.url,postedAt:j.datePosted,employmentType:j.employmentType,locationType:/TELECOMMUTE|remote/i.test(JSON.stringify(j.jobLocationType||""))?"remote":"unknown"})}}}catch{}});return out}
 export async function fetchJobs(sourceUrl,atsType){
