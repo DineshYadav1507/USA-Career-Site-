@@ -4,7 +4,7 @@ import cors from "cors";
 import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import {syncSource} from "./sync.js";
+import {syncSource} from "./sync.js";import {detectSource,ATS,CATEGORIES,classifyIndustry} from "./sourceRegistry.js";
 import { URL } from "node:url";
 
 const app=express();
@@ -25,6 +25,7 @@ function extractSkills(text=""){const catalog=["Java","Spring Boot","JavaScript"
 function normalizeCareerUrl(raw){const u=new URL(raw);if(!["http:","https:"].includes(u.protocol))throw Error("Only HTTP(S) URLs are allowed");return u.toString()}
 function parseDate(v){const d=v?new Date(v):new Date();return Number.isNaN(d.getTime())?new Date():d}
 
+app.get("/api/meta",(req,res)=>res.json({ats:Object.values(ATS),industries:CATEGORIES,policy:{country:"United States",maxAgeDays:30}}));
 app.get("/api/health",async(req,res)=>{try{await pool.query("SELECT 1");res.json({ok:true,service:"talent-inspirations",scope:"USA-only",database:"connected"})}catch(e){res.status(503).json({ok:false,database:"unavailable"})}});
 app.get("/api/jobs",async(req,res)=>{const {q="",level="",category:cat="",location=""}=req.query;const where=["j.is_active=1","j.expires_at>=NOW()","LOWER(j.country)='united states'"];const p=[];if(q){where.push("(j.title LIKE ? OR j.description LIKE ? OR j.location LIKE ?)");p.push(`%${q}%`,`%${q}%`,`%${q}%`)}if(level){where.push("j.experience_level=?");p.push(level)}if(cat){where.push("j.category=?");p.push(cat)}if(location){where.push("j.location LIKE ?");p.push(`%${location}%`)}const [rows]=await pool.query(`SELECT j.id,c.name company,j.title,j.description,j.location,j.location_type,j.experience_level,j.category,j.apply_url,j.posted_at,j.expires_at,(SELECT JSON_ARRAYAGG(js.skill_name) FROM job_skills js WHERE js.job_id=j.id) skills FROM jobs j JOIN companies c ON c.id=j.company_id WHERE ${where.join(" AND ")} ORDER BY COALESCE(j.posted_at,j.first_seen_at) DESC`,p);res.json({jobs:rows})});
 
@@ -32,7 +33,7 @@ app.post("/api/admin/login",async(req,res)=>{const {email,password}=req.body||{}
 
 app.get("/api/admin/sources",auth,async(req,res)=>{const [rows]=await pool.query("SELECT s.*,c.name company FROM job_sources s JOIN companies c ON c.id=s.company_id ORDER BY s.id DESC");res.json({sources:rows})});
 
-app.post("/api/admin/sources",auth,async(req,res)=>{try{const {companyName,careerUrl}=req.body||{};const url=normalizeCareerUrl(careerUrl);if(!companyName)return res.status(400).json({error:"Company name required"});const [c]=await pool.query("INSERT INTO companies(name,career_url) VALUES(?,?)",[companyName,url]);await pool.query("INSERT INTO job_sources(company_id,source_url) VALUES(?,?)",[c.insertId,url]);res.status(201).json({message:"USA career source added",companyId:c.insertId})}catch(e){res.status(400).json({error:e.message})}});
+app.post("/api/admin/sources",auth,async(req,res)=>{try{const {companyName,careerUrl}=req.body||{};const url=normalizeCareerUrl(careerUrl);if(!companyName)return res.status(400).json({error:"Company name required"});const [c]=const ats=detectSource(url);const inferred=industry==="Other"?classifyIndustry(companyName):industry;const[c]=await pool.query("INSERT INTO companies(name,career_url,industry) VALUES(?,?,?)",[companyName,url,inferred]);await pool.query("INSERT INTO job_sources(company_id,source_url,ats_type) VALUES(?,?,?)",[c.insertId,url,ats]);res.status(201).json({message:"Career source added",atsType:ats,industry:inferred,companyId:c.insertId});return;await pool.query("INSERT INTO job_sources(company_id,source_url) VALUES(?,?)",[c.insertId,url]);res.status(201).json({message:"USA career source added",companyId:c.insertId})}catch(e){res.status(400).json({error:e.message})}});
 
 app.post("/api/admin/jobs",auth,async(req,res)=>{const {companyId,title,description,location,applyUrl,postedAt,locationType="unknown"}=req.body||{};if(!companyId||!title||!description||!location||!applyUrl)return res.status(400).json({error:"companyId, title, description, location and applyUrl are required"});if(!isUSJob(location,description))return res.status(422).json({error:"Only USA jobs can be published"});const posted=parseDate(postedAt);const expires=new Date(posted.getTime()+30*24*60*60*1000);if(expires<=new Date())return res.status(422).json({error:"Job is older than 30 days"});const exp=classifyExperience(description);const cat=category(`${title} ${description}`);const skills=extractSkills(description);const [r]=await pool.query("INSERT INTO jobs(company_id,source_url,title,description,location,country,location_type,experience_level,category,apply_url,posted_at,expires_at) VALUES(?,?,?,?,?,'United States',?,?,?,?,?,?)",[companyId,applyUrl,title,description,location,locationType,exp,cat,applyUrl,posted,expires]);for(const skill of skills)await pool.query("INSERT IGNORE INTO job_skills(job_id,skill_name) VALUES(?,?)",[r.insertId,skill]);res.status(201).json({id:r.insertId,experienceLevel:exp,category:cat,skills})});
 
