@@ -26,7 +26,7 @@ function workdayPostedDate(value){
  const now=new Date();
  if(/today/i.test(s))return now.toISOString();
  if(/yesterday/i.test(s))return new Date(now.getTime()-86400000).toISOString();
- const m=s.match(/(\\d+)\\+?\\s+days?\\s+ago/i);
+ const m=s.match(/(\d+)\+?\s+days?\s+ago/i);
  if(m)return new Date(now.getTime()-Number(m[1])*86400000).toISOString();
  const direct=new Date(s);
  return Number.isNaN(direct.getTime())?null:direct.toISOString();
