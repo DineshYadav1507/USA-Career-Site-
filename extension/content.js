@@ -1,0 +1,3 @@
+function fill(el,value){if(!el||value==null)return;el.focus();el.value=value;el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}))}
+function find(re){return [...document.querySelectorAll("input,textarea")].find(el=>re.test((el.name+" "+el.id+" "+el.placeholder+" "+el.getAttribute("aria-label")||"").toLowerCase()))}
+chrome.runtime.onMessage.addListener(msg=>{if(msg?.type!=="TI_APPLY_PACKAGE")return;const p=msg.payload;fill(find(/cover.?letter|message|additional.?information/),p.coverLetter);alert("Talent Inspirations prepared the cover letter and application package for "+(p.job?.title||"this job")+". Review all fields before submitting.");});
