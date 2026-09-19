@@ -73,7 +73,7 @@ async function notifyMatchingUsers(job){
   const skillHit=!skillList.length||skillList.some(s=>text.includes(String(s).toLowerCase()));
   if(!keywordHit||!categoryHit||!industryHit||!locationHit||!skillHit)continue;
   if(!entitled(a))continue;
-  const msg=`🇺🇸 New USA Job Alert\n\n${job.title}\n${job.company}\n${job.location||"USA"}\nCategory: ${job.category}\nSkills: ${(job.skills||[]).slice(0,8).join(", ")||"See job details"}\n\nApply: ${job.apply_url}\n\nTalent Inspirations`;
+  const msg=`🌍 New Job Alert · ${job.country||"Selected market"}\n\n${job.title}\n${job.company}\n${job.location||"USA"}\nCategory: ${job.category}\nSkills: ${(job.skills||[]).slice(0,8).join(", ")||"See job details"}\n\nApply: ${job.apply_url}\n\nTalent Inspirations`;
   try{
    await whatsapp.send(normalizePhone(a.whatsapp_number),msg,{type:"job_alert",jobId:job.id,alertId:a.id});
    const status="queued";
@@ -214,7 +214,7 @@ app.get("/api/billing/plans",(req,res)=>res.json({plans:PLANS}));
 app.post("/api/billing/checkout",userAuth,async(req,res)=>{try{const [u]=await pool.query("SELECT email FROM users WHERE id=?",[req.user.id]);const s=await createCheckout({userId:req.user.id,email:u[0]?.email,planCode:req.body?.planCode||"pro_31"});res.json({url:s.url})}catch(e){res.status(400).json({error:e.message})}});
 
 app.post("/api/admin/login",async(req,res)=>{const [rows]=await pool.query("SELECT * FROM admin_users WHERE email=? LIMIT 1",[String(req.body?.email||"").toLowerCase()]);if(!rows[0]||!(await bcrypt.compare(String(req.body?.password||""),rows[0].password_hash)))return res.status(401).json({error:"Invalid admin credentials"});res.json({token:tokenFor({type:"admin",id:rows[0].id,email:rows[0].email})})});
-app.get("/api/admin/dashboard",adminAuth,async(req,res)=>{const [[stats]]=await pool.query("SELECT (SELECT COUNT(*) FROM jobs WHERE is_active=1 AND country='USA') jobs,(SELECT COUNT(*) FROM companies) companies,(SELECT COUNT(*) FROM career_sources WHERE status='active') sources,(SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM job_alerts WHERE active=1) alerts");const [recent]=await pool.query("SELECT ar.id,c.name company,ar.found_count,ar.imported_count,ar.status,ar.started_at,ar.message FROM agent_runs ar LEFT JOIN career_sources s ON s.id=ar.source_id LEFT JOIN companies c ON c.id=s.company_id ORDER BY ar.id DESC LIMIT 20");res.json({stats,recent})});
+app.get("/api/admin/dashboard",adminAuth,async(req,res)=>{const [[stats]]=await pool.query("SELECT (SELECT COUNT(*) FROM jobs WHERE is_active=1) jobs,(SELECT COUNT(*) FROM companies) companies,(SELECT COUNT(*) FROM career_sources WHERE status='active') sources,(SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM job_alerts WHERE active=1) alerts");const [recent]=await pool.query("SELECT ar.id,c.name company,ar.found_count,ar.imported_count,ar.status,ar.started_at,ar.message FROM agent_runs ar LEFT JOIN career_sources s ON s.id=ar.source_id LEFT JOIN companies c ON c.id=s.company_id ORDER BY ar.id DESC LIMIT 20");res.json({stats,recent})});
 app.get("/api/admin/jobs",adminAuth,async(req,res)=>{
  const [rows]=await pool.query(`SELECT j.id,j.title,j.country,j.location,j.category,j.experience_level,j.is_active,j.posted_at,j.first_seen_at,j.apply_url,c.name company,s.source_url,s.status source_status
  FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN career_sources s ON s.id=j.source_id
@@ -266,7 +266,7 @@ app.post("/api/admin/agent-command",adminAuth,async(req,res)=>{
   const added=[];for(const [name,url] of selected){const id=await upsertSource(name,url,/pharma/i.test(name)?"Pharmaceuticals":"Healthcare");added.push({name,url,id})}
   return res.json({ok:true,message:`Career Agent added ${added.length} healthcare career sources. They will be scanned every 5 minutes.`,added});
  }
- if(/status|report|how many|stats/.test(command)){const [[x]]=await pool.query("SELECT COUNT(*) sources,(SELECT COUNT(*) FROM jobs WHERE is_active=1) jobs FROM career_sources");return res.json({ok:true,message:`Agent currently has ${x.sources} sources and ${x.jobs} active USA jobs.`})}
+ if(/status|report|how many|stats/.test(command)){const [[x]]=await pool.query("SELECT COUNT(*) sources,(SELECT COUNT(*) FROM jobs WHERE is_active=1) jobs FROM career_sources");return res.json({ok:true,message:`Agent currently has ${x.sources} sources and ${x.jobs} active jobs across supported markets.`})}
  res.json({ok:true,message:"I can currently handle commands like: 'add all healthcare career links', 'agent status'. More source packs can be added to this command catalog."});
 });
 app.get("/api/admin/users",adminAuth,async(req,res)=>{const [rows]=await pool.query("SELECT id,name,email,country,whatsapp_number,whatsapp_opt_in,plan,grant_until,master_cv_name,master_cv_updated_at,created_at FROM users ORDER BY id DESC LIMIT 500");res.json({users:rows})});
