@@ -9,12 +9,12 @@ export async function importCareerWorkbook(buffer,{adminId,pool,upsertSource,sca
   const name=pick(row,["company","companyname","employer","name"]);
   const url=pick(row,["careerurl","careersurl","careerpage","careers","url","joburl","website"]);
   const industry=pick(row,["industry","sector"])||"Other";
-  const country=pick(row,["country","market","region"])||"USA";
+  const rawCountry=pick(row,["country","market","region"])||"USA";\n  const countryMap={"US":"USA","USA":"USA","United States":"USA","United States of America":"USA","UK":"UK","United Kingdom":"UK","Canada":"Canada","Australia":"Australia","Germany":"Germany","Netherlands":"Netherlands","Ireland":"Ireland","France":"France","Japan":"Japan","Singapore":"Singapore","UAE":"UAE","United Arab Emirates":"UAE","Saudi Arabia":"Saudi Arabia","New Zealand":"New Zealand","Switzerland":"Switzerland","Sweden":"Sweden","Norway":"Norway","Denmark":"Denmark","Finland":"Finland","Belgium":"Belgium","Austria":"Austria"};\n  const country=countryMap[rawCountry]||rawCountry;
   if(!name||!/^https?:\/\//i.test(url)){errors++;continue}
   const key=name.toLowerCase()+"|"+url.toLowerCase();if(seen.has(key))continue;seen.add(key);
   try{const sourceId=await upsertSource(name,url,industry,country);sourceCount++;companyCount++;imported++;row.__sourceId=sourceId;}catch{errors++}
  }
- const [r]=await pool.query("INSERT INTO source_imports(admin_id,file_name,company_count,source_count,imported_count,error_count) VALUES(?,?,?,?,?,?)",[adminId,"uploaded-workbook.xlsx",companyCount,sourceCount,imported,errors]);
+ const [r]=await pool.query("INSERT INTO source_imports(admin_id,file_name,company_count,source_count,imported_count,error_count) VALUES(?,?,?,?,?,?)",[adminId,req?.fileName||"uploaded-workbook.xlsx",companyCount,sourceCount,imported,errors]);
  const scanResults=[];
  const importedIds=[...new Set(rows.map(r=>r.__sourceId).filter(Boolean))].slice(0,100);
  for(const sourceId of importedIds){try{scanResults.push(await scanSource(sourceId))}catch(e){scanResults.push({sourceId,error:e.message})}}
