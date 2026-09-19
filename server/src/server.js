@@ -156,9 +156,9 @@ app.post("/api/billing/webhook",express.raw({type:"application/json"}),async(req
    const userId=Number(obj.metadata?.user_id||obj.client_reference_id||0);
    if(userId){
     const active=event.type!=="customer.subscription.deleted"&&(obj.status==="active"||obj.status==="trialing"||event.type==="checkout.session.completed");
-    const end=event.type==="checkout.session.completed"?new Date(Date.now()+Number(obj.metadata?.duration_days||plan.durationDays)*86400000):(obj.current_period_end?new Date(obj.current_period_end*1000):null);
     const planCode=obj.metadata?.plan_code||"pro_31";
     const plan=getPlan(planCode);
+    const end=event.type==="checkout.session.completed"?new Date(Date.now()+Number(obj.metadata?.duration_days||plan.durationDays)*86400000):(obj.current_period_end?new Date(obj.current_period_end*1000):null);
     await pool.query("UPDATE users SET plan=?,grant_until=?,updated_at=NOW() WHERE id=?",[active?"pro":"free",active?end:null,userId]);
     await pool.query("INSERT INTO subscriptions(user_id,provider,provider_customer_id,provider_subscription_id,status,plan_name,current_period_end) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status),current_period_end=VALUES(current_period_end),provider_subscription_id=VALUES(provider_subscription_id),provider_customer_id=VALUES(provider_customer_id)",[userId,"stripe",obj.customer||null,obj.subscription||obj.id,event.type==="customer.subscription.deleted"?"canceled":(obj.status||"active"),plan.name,end]);
    }
