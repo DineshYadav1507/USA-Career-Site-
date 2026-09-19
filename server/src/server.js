@@ -263,12 +263,12 @@ const attachWhatsAppBot=()=>{whatsapp.on("message",async msg=>{try{if(!msg?.body
 const websiteAnswer=async question=>{
  const q=String(question||"").toLowerCase();
  if(/plan|pricing|price|subscription|pro/.test(q))return "Talent Inspirations has a free job-search experience and a Pro subscription for personalized job alerts and WhatsApp delivery. Admin-granted users can receive free access for a period chosen by the admin.";
- if(/benefit|feature|what.*get|why.*pro/.test(q))return "Pro is designed for personalized job alerts: role, category, industry, location and skills. Matching new USA jobs can be delivered through WhatsApp when the user opts in.";
- if(/3.*day|7.*day|15.*day|30.*day|recent|latest/.test(q))return "You can filter live USA jobs by Last 3 Days, Last 1 Week, Last 15 Days or Last 30 Days.";
- if(/usa|united states|location/.test(q))return "Talent Inspirations is a USA-only job index. The Career Agent keeps active employer listings and filters out non-USA locations.";
+ if(/benefit|feature|what.*get|why.*pro/.test(q))return "Pro is designed for personalized job alerts: role, category, industry, location and skills. Matching jobs from the user's selected country can be delivered through WhatsApp when the user opts in.";
+ if(/3.*day|7.*day|15.*day|30.*day|recent|latest/.test(q))return "You can filter live jobs by country and by Last 3 Days, Last 1 Week, Last 15 Days or Last 30 Days.";
+ if(/usa|united states|location/.test(q))return "Talent Inspirations supports 20 countries. The Career Agent keeps active employer listings for the selected country and filters out other locations.";
  if(/alert|notification|whatsapp/.test(q))return "Users can create alerts using role, category, industry, location and skills. WhatsApp delivery requires opt-in and is sent individually, not as a broadcast.";
- if(/career agent|agent|how.*work|scan/.test(q))return "The Career Agent scans admin-added public career pages every 5 minutes, detects supported public ATS feeds or structured job data, maps skills and maintains the active USA job index.";
- return "I can answer questions about Talent Inspirations plans, benefits, job filters, USA jobs, alerts, WhatsApp delivery and how the Career Agent works.";
+ if(/career agent|agent|how.*work|scan/.test(q))return "The Career Agent scans admin-added public career pages every 5 minutes, detects supported public ATS feeds or structured job data, maps skills and maintains the active country-specific job index.";
+ return "I can answer questions about Talent Inspirations plans, benefits, country filters, jobs, alerts, WhatsApp delivery and how the Career Agent works.";
 };
 const seed=async()=>{
  const count=(await pool.query("SELECT COUNT(*) n FROM career_sources"))[0][0].n;
