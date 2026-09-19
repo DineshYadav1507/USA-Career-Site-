@@ -6,7 +6,7 @@ async function api(path,options={},token){const r=await fetch(API+path,{...optio
 export default function CandidateHub(){
  const token=localStorage.getItem("ti_token")||"";const user=JSON.parse(localStorage.getItem("ti_user")||"null");
  const [buckets,setBuckets]=useState([]),[apps,setApps]=useState([]),[plans,setPlans]=useState([]),[open,setOpen]=useState(null),[intel,setIntel]=useState({}),[cv,setCv]=useState(""),[cvName,setCvName]=useState("Master CV"),[msg,setMsg]=useState("");
- const load=()=>Promise.all([api("/account/today-buckets",{},token),api("/account/applications",{},token),api("/billing/plans")]).then(([b,a,p])=>{setBuckets(b.buckets||[]);setApps(a.applications||[]);setPlans(p.plans||[])}).catch(e=>setMsg(e.message));
+ const load=()=>Promise.all([api("/account/today-buckets",{},token),api("/account/applications",{},token),api("/billing/plans"),api("/account",{},token)]).then(([b,a,p,ac])=>{setBuckets(b.buckets||[]);setApps(a.applications||[]);setPlans(p.plans||[]);setCv(ac.user?.master_cv_text||"");setCvName(ac.user?.master_cv_name||"Master CV")}).catch(e=>setMsg(e.message));
  useEffect(()=>{if(token)load()},[token]);
  const prepare=async id=>{try{const d=await api("/account/job/"+id+"/prepare",{method:"POST"},token);setIntel(x=>({...x,[id]:d.package}));setMsg("Tailored resume and cover letter prepared.");load()}catch(e){setMsg(e.message)}};
  const analyze=async id=>{try{const d=await api("/account/job/"+id+"/intelligence",{},token);setIntel(x=>({...x,[id]:d.intelligence}))}catch(e){setMsg(e.message)}};
