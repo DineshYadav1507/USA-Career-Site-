@@ -92,7 +92,7 @@ async function saveJobs(source,jobs){
   seen.add(external);
   const posted=new Date(j.postedAt||Date.now());
   if(Number.isNaN(posted.getTime()))continue;
-  const expires=new Date(posted.getTime()+30*86400000);
+  const expires=new Date(Date.now()+30*86400000);
   if(expires<=new Date())continue;
   const skills=Array.isArray(j.skills)?j.skills:[];
   const [existing]=await pool.query("SELECT id FROM jobs WHERE source_id=? AND external_job_id=? LIMIT 1",[source.id,external]);
@@ -111,8 +111,8 @@ async function saveJobs(source,jobs){
    await notifyMatchingUsers({id:jobId,...j,company:company[0]?.name||"",industry:company[0]?.industry||"Other",apply_url:j.applyUrl});
   }
  }
- if(seen.size){
-  const ids=[...seen];const ph=ids.map(()=>"?").join(",");
+ if(seen.size && jobs.scanMeta?.complete){
+  const ids=[...seen];const ph=ids.map(()=>"?" ).join(",");
   await pool.query(`UPDATE jobs SET is_active=0 WHERE source_id=? AND external_job_id NOT IN (${ph}) AND last_seen_at<DATE_SUB(NOW(),INTERVAL 4 MINUTE)`,[source.id,...ids]);
  }
  await pool.query(`UPDATE jobs SET is_active=0 WHERE expires_at<=NOW() OR country NOT IN ("USA","UK","Canada","Australia","Germany","Netherlands","Ireland","France","Japan","Singapore","UAE","Saudi Arabia","New Zealand","Switzerland","Sweden","Norway","Denmark","Finland","Belgium","Austria")`);
@@ -127,7 +127,7 @@ async function scanSource(sourceId){
   const result=await scanCareerPage(source.source_url,source.country);
   const saved=await saveJobs(source,result);
   await pool.query("UPDATE career_sources SET status='active',last_checked_at=NOW(),last_success_at=NOW(),last_sync_found=?,last_sync_imported=?,last_error=NULL,discovered_ats=? WHERE id=?",[result.length,saved.imported,result.ats||"generic",sourceId]);
-  await pool.query("UPDATE agent_runs SET finished_at=NOW(),status='success',found_count=?,imported_count=?,message=? WHERE id=?",[result.length,saved.imported,`ATS ${result.ats||"generic"}; new ${saved.newJobs}`,runId]);
+  await pool.query("UPDATE agent_runs SET finished_at=NOW(),status='success',found_count=?,imported_count=?,message=? WHERE id=?",[result.length,saved.imported,`ATS ${result.ats||"generic"}; mode ${result.scanMeta?.mode||"generic"}; new ${saved.newJobs}`,runId]);
   return {sourceId,company:source.company,found:result.length,imported:saved.imported,newJobs:saved.newJobs,ats:result.ats||"generic"};
  }catch(e){
   await pool.query("UPDATE career_sources SET status='error',last_checked_at=NOW(),last_error=? WHERE id=?",[e.message,sourceId]);
