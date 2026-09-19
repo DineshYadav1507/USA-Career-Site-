@@ -25,6 +25,7 @@ function isSupportedLocation(location="",description="",country="USA"){
  const loc=String(location||"");
  const text=String(loc+" "+description);
  if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
+ if(!loc.trim())return !/worldwide|global|anywhere/i.test(text);
  if(country==="USA"){
   if(/\b(united states|usa|u\.s\.)\b/i.test(loc))return true;
   if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(loc)))return true;
@@ -115,7 +116,7 @@ function atsLinks(html,base){
  $("a[href]").each((_,a)=>{const h=absolute(base,$(a).attr("href")||"");if(/greenhouse\.io|jobs\.lever\.co|myworkdayjobs\.com/i.test(h))matches.add(h)});
  return [...matches].slice(0,25);
 }
-async function workday(url){
+async function workday(url,country="USA"){
  const u=new URL(url);const match=u.hostname.match(/^(.+?)\.wd(\\d+)\.myworkdayjobs\.com$/i);if(!match)return [];
  const parts=u.pathname.split("/").filter(Boolean);const locale=/^[a-z]{2}-[A-Z]{2}$/i.test(parts[0]||"")?parts[0]:"en-US";const site=/^[a-z]{2}-[A-Z]{2}$/i.test(parts[0]||"")?parts[1]:parts[0];if(!site)return [];
  const endpoint=u.origin+"/wday/cxs/"+encodeURIComponent(match[1])+"/"+encodeURIComponent(site)+"/jobs";
@@ -127,7 +128,7 @@ async function workday(url){
    const data=await r.json();const posts=Array.isArray(data.jobPostings)?data.jobPostings:[];if(!posts.length)break;
    for(const p of posts){
     const path=String(p.externalPath||"");if(!path||seen.has(path))continue;
-    const loc=String(p.locationsText||"");if(!isUSA(loc,p.title||""))continue;
+    const loc=String(p.locationsText||"");if(!isSupportedLocation(loc,p.title||"",country))continue;
     seen.add(path);const posted=parseDate(p.postedOn||p.postedDate);if(!posted&&/days?\s+ago/i.test(String(p.postedOn||"")))continue;
     out.push({externalJobId:path,title:p.title||"",description:cleanHtml(p.jobPostingInfo?.jobDescription||p.jobDescription||p.description||((p.bulletFields||[]).join(" "))),location:loc,applyUrl:new URL("/"+locale+"/"+site+(path.startsWith("/")?path:"/"+path),u.origin).toString(),postedAt:posted,locationType:/remote/i.test(loc)?"remote":"unknown"});
    }
@@ -136,17 +137,17 @@ async function workday(url){
  }
  return out;
 }
-async function fetchOne(url){
+async function fetchOne(url,country="USA"){
  const u=new URL(url);
  if(/greenhouse\.io/.test(u.hostname)){const x=await greenhouse(url);if(x.length)return {jobs:x,ats:"greenhouse"}}
  if(u.hostname==="jobs.lever.co"){const x=await lever(url);if(x.length)return {jobs:x,ats:"lever"}}
- if(/myworkdayjobs\.com$/.test(u.hostname)){const x=await workday(url);if(x.length)return {jobs:x,ats:"workday"}}
+ if(/myworkdayjobs\.com$/.test(u.hostname)){const x=await workday(url,country);if(x.length)return {jobs:x,ats:"workday"}}
  const response=await timeoutFetch(url);if(!response.ok)throw new Error("Career page HTTP "+response.status);
  const html=await response.text();
  const structured=jsonLdJobs(html);if(structured.length)return {jobs:structured,ats:"generic-jsonld"};
  for(const atsUrl of atsLinks(html,url)){
   try{
-   const x=await fetchOne(atsUrl);
+   const x=await fetchOne(atsUrl,country);
    if(x.jobs.length)return x;
   }catch{}
  }
@@ -157,12 +158,12 @@ async function fetchOne(url){
   if(seen.has(href))return;seen.add(href);
   const context=$(a).parent().text().replace(/\s+/g," ").trim();
   const location=(context.match(/([A-Za-z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b)/i)||[])[1]||"";
-  if(isUSA(location,context)||/united states|usa/i.test(context))out.push({externalJobId:href,title,description:context,location,applyUrl:href,postedAt:null,locationType:/remote/i.test(context)?"remote":"unknown"});
+  if(isSupportedLocation(location,context,country))out.push({externalJobId:href,title,description:context,location,applyUrl:href,postedAt:null,locationType:/remote/i.test(context)?"remote":"unknown"});
  });
  return {jobs:out.slice(0,250),ats:"generic"};
 }
 export async function scanCareerPage(url,country="USA"){
- const result=await fetchOne(url);
+ const result=await fetchOne(url,country);
  const now=new Date();
  const output=result.jobs.map(j=>{
   const published=j.postedAt instanceof Date?j.postedAt:parseDate(j.postedAt);
