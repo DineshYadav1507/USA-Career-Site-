@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Talent Inspirations Apply Assistant",
+  "version": "0.1.0",
+  "description": "Fetches a signed-in Talent Inspirations application package and helps fill supported job forms.",
+  "permissions": ["storage","activeTab","scripting"],
+  "host_permissions": ["https://*/*","http://*/*"],
+  "action": {"default_title":"Talent Inspirations Apply Assistant","default_popup":"popup.html"},
+  "content_scripts": [{"matches":["https://*/*","http://*/*"],"js":["content.js"],"run_at":"document_idle"}]
+}
