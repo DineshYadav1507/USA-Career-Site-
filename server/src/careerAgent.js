@@ -162,10 +162,17 @@ async function fetchOne(url,country="USA"){
  if(u.hostname==="jobs.lever.co"){const x=await lever(url);if(x.length)return {jobs:x,ats:"lever",complete:true,mode:"lever"}}
  if(/myworkdayjobs\.com$/i.test(u.hostname)){const x=await workday(url,country);if(x.length)return {jobs:x,ats:"workday",complete:true,mode:"workday"}}
  const response=await timeoutFetch(url,25000);if(!response.ok)throw new Error("Career page HTTP "+response.status);
- const html=await response.text();const structured=jsonLdJobs(html,url);if(structured.length)return {jobs:structured,ats:"generic-jsonld",complete:true,mode:"jsonld"};
- for(const atsUrl of atsLinks(html,url)){try{const x=await fetchOne(atsUrl,country);if(x.jobs.length)return x}catch{}}
- const jobs=await siteWideJobs(url,country);
- return {jobs,ats:"generic-site-crawl",complete:true,mode:"site-crawl"};
+ const html=await response.text();
+ const structured=jsonLdJobs(html,url);
+ const atsUrls=atsLinks(html,url);
+ const all=[...structured];let atsName=structured.length?"generic-jsonld":"generic-site-crawl";
+ for(const atsUrl of atsUrls){
+  try{const x=await fetchOne(atsUrl,country);if(x.jobs.length){all.push(...x.jobs);atsName=x.ats||atsName}}catch{}
+ }
+ const crawled=await siteWideJobs(url,country);
+ all.push(...(crawled.jobs||[]));
+ const unique=[...new Map(all.filter(j=>j.applyUrl).map(j=>[j.externalJobId||j.applyUrl,j])).values()];
+ return {jobs:unique,ats:atsName,complete:true,mode:crawled.jobs?.length?"site-crawl":atsName};
 }
 export async function scanCareerPage(url,country="USA"){
  const result=await fetchOne(url,country);const now=new Date();
