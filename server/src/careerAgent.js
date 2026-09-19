@@ -106,9 +106,9 @@ async function lever(url){
 function atsLinks(html,base){
  const matches=new Set();
  const patterns=[
-  /https?:\\/\\/boards\\.greenhouse\\.io\\/[^"'<>\\s]+/gi,
-  /https?:\\/\\/jobs\\.lever\\.co\\/[^"'<>\\s]+/gi,
-  /https?:\\/\\/[^"'<>\\s]+\\.myworkdayjobs\\.com\\/[^"'<>\\s]+/gi
+  new RegExp("https?:\\\\/\\\\/boards\\\\.greenhouse\\\\.io\\\\/[^\\\"'<>\\\\s]+","gi"),
+  new RegExp("https?:\\\\/\\\\/jobs\\\\.lever\\\\.co\\\\/[^\\\"'<>\\\\s]+","gi"),
+  new RegExp("https?:\\\\/\\\\/[^\\\"'<>\\\\s]+\\\\.myworkdayjobs\\\\.com\\\\/[^\\\"'<>\\\\s]+","gi")
  ];
  for(const p of patterns)(html.match(p)||[]).forEach(x=>matches.add(x.replace(/&amp;/g,"&")));
  const $=cheerio.load(html);
