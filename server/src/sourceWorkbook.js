@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-export async function importCareerWorkbook(buffer,{adminId,pool,upsertSource,scanSource}) {
+export async function importCareerWorkbook(buffer,{adminId,fileName="uploaded-workbook.xlsx",pool,upsertSource,scanSource}) {
  const wb=XLSX.read(buffer,{type:"buffer"});
  const rows=[];
  for(const sheet of wb.SheetNames){for(const row of XLSX.utils.sheet_to_json(wb.Sheets[sheet],{defval:""})){rows.push({...row,__sheet:sheet});}}
@@ -14,7 +14,7 @@ export async function importCareerWorkbook(buffer,{adminId,pool,upsertSource,sca
   const key=name.toLowerCase()+"|"+url.toLowerCase();if(seen.has(key))continue;seen.add(key);
   try{const sourceId=await upsertSource(name,url,industry,country);sourceCount++;companyCount++;imported++;row.__sourceId=sourceId;}catch{errors++}
  }
- const [r]=await pool.query("INSERT INTO source_imports(admin_id,file_name,company_count,source_count,imported_count,error_count) VALUES(?,?,?,?,?,?)",[adminId,req?.fileName||"uploaded-workbook.xlsx",companyCount,sourceCount,imported,errors]);
+ const [r]=await pool.query("INSERT INTO source_imports(admin_id,file_name,company_count,source_count,imported_count,error_count) VALUES(?,?,?,?,?,?)",[adminId,fileName,companyCount,sourceCount,imported,errors]);
  const scanResults=[];
  const importedIds=[...new Set(rows.map(r=>r.__sourceId).filter(Boolean))].slice(0,100);
  for(const sourceId of importedIds){try{scanResults.push(await scanSource(sourceId))}catch(e){scanResults.push({sourceId,error:e.message})}}
