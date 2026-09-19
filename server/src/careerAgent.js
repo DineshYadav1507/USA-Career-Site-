@@ -22,35 +22,22 @@ async function jsonFetch(url){
 }
 function absolute(base,href){try{return new URL(href,base).toString()}catch{return href}}
 function isSupportedLocation(location="",description="",country="USA"){
- const text=String(location+" "+description).toLowerCase();
+ const loc=String(location||"");
+ const text=String(loc+" "+description);
  if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
  if(country==="USA"){
-  if(/\b(united states|usa|u\.s\.)\b/i.test(location))return true;
-  if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(location)))return true;
-  if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(location)))return true;
-  return /remote/i.test(location)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
+  if(/\b(united states|usa|u\.s\.)\b/i.test(loc))return true;
+  if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(loc)))return true;
+  if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(loc)))return true;
+  return /remote/i.test(loc)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
  }
  const terms=COUNTRY_TERMS[country]||[];
- return terms.some(term=>new RegExp("\\b"+term.replace(/[.*+?^{}()|[\\]\\\\]/g,"\\\\function isUSA(location="",description=""){
- const text=String(location+" "+description);
- if(NON_US.test(text))return false;
- if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
- if(/\b(united states|usa|u\.s\.)\b/i.test(location))return true;
- if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(location)))return true;
- if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(location)))return true;
- return /remote/i.test(location)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
-}")+"\\b","i").test(location)) ||
-   terms.some(term=>new RegExp("\\b"+term.replace(/[.*+?^{}()|[\\]\\\\]/g,"\\\\function isUSA(location="",description=""){
- const text=String(location+" "+description);
- if(NON_US.test(text))return false;
- if(/remote\s*[-–—:]?\s*(worldwide|global|anywhere)/i.test(text))return false;
- if(/\b(united states|usa|u\.s\.)\b/i.test(location))return true;
- if(STATES.some(s=>new RegExp("\\b"+s+"\\b","i").test(location)))return true;
- if(STATE_CODES.some(s=>new RegExp("(?:^|[,\\s])"+s+"(?:$|[,\\s])","i").test(location)))return true;
- return /remote/i.test(location)&&/\b(united states|usa|u\.s\.)\b/i.test(text);
-}")+"\\b","i").test(text));
+ return terms.some(term=>new RegExp("\\b"+term.replace(/[.*+?^{}()|[\\]\\\\]/g,"\\\\$&")+"\\b","i").test(loc))
+   || terms.some(term=>new RegExp("\\b"+term.replace(/[.*+?^{}()|[\\]\\\\]/g,"\\\\$&")+"\\b","i").test(text));
 }
-
+function isUSA(location="",description=""){
+ return isSupportedLocation(location,description,"USA");
+}
 function cleanHtml(value=""){return String(value).replace(/<[^>]+>/g," ").replace(/&nbsp;/gi," ").replace(/\\s+/g," ").trim()}
 function parseDate(value){
  if(!value)return null;
