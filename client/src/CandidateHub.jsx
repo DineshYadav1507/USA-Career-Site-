@@ -4,7 +4,7 @@ import {FileText,Briefcase,ChevronDown,ChevronUp,Sparkles,ExternalLink,History,C
 const API=import.meta.env.VITE_API_URL||"/api";
 async function api(path,options={},token){const r=await fetch(API+path,{...options,headers:{"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Request failed");return d}
 export default function CandidateHub(){
- const token=localStorage.getItem("ti_token")||"";const user=JSON.parse(localStorage.getItem("ti_user")||"null");
+ const token=localStorage.getItem("ti_user_token")||"";const user=JSON.parse(localStorage.getItem("ti_user")||"null");
  const [buckets,setBuckets]=useState([]),[apps,setApps]=useState([]),[plans,setPlans]=useState([]),[open,setOpen]=useState(null),[intel,setIntel]=useState({}),[cv,setCv]=useState(""),[cvName,setCvName]=useState("Master CV"),[msg,setMsg]=useState("");
  const load=()=>Promise.all([api("/account/today-buckets",{},token),api("/account/applications",{},token),api("/billing/plans"),api("/account",{},token)]).then(([b,a,p,ac])=>{setBuckets(b.buckets||[]);setApps(a.applications||[]);setPlans(p.plans||[]);setCv(ac.user?.master_cv_text||"");setCvName(ac.user?.master_cv_name||"Master CV")}).catch(e=>setMsg(e.message));
  useEffect(()=>{if(token)load()},[token]);
