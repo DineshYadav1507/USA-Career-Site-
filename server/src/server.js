@@ -181,15 +181,15 @@ app.get("/api/jobs",async(req,res)=>{
  }catch(e){res.status(500).json({error:e.message})}
 });
 app.get("/api/jobs/:id",async(req,res)=>{
- const [rows]=await pool.query("SELECT j.*,c.name company,c.industry,c.career_url FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.id=? AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() LIMIT 1",[req.params.id]);
+ const [rows]=await pool.query("SELECT j.*,c.name company,c.industry,c.career_url FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.id=? AND j.is_active=1 AND j.country='USA' AND j.expires_at>NOW() LIMIT 1",[req.params.id]);
  if(!rows[0])return res.status(404).json({error:"Job is no longer active"});
  const j=rows[0];try{j.skills=JSON.parse(j.skills_json||"[]")}catch{j.skills=[]}delete j.skills_json;res.json({job:j});
 });
-app.get("/api/companies/:id",async(req,res)=>{const [rows]=await pool.query("SELECT c.*,COUNT(j.id) current_hiring FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) WHERE c.id=? GROUP BY c.id",[req.params.id]);if(!rows[0])return res.status(404).json({error:"Company not found"});res.json({company:rows[0]})});
-app.get("/api/companies/:id/jobs",async(req,res)=>{const [jobs]=await pool.query("SELECT j.*,c.name company,c.industry FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.company_id=? AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) ORDER BY COALESCE(j.posted_at,j.first_seen_at) DESC",[req.params.id]);jobs.forEach(j=>{try{j.skills=JSON.parse(j.skills_json||"[]")}catch{j.skills=[]}delete j.skills_json});res.json({jobs})});
+app.get("/api/companies/:id",async(req,res)=>{const [rows]=await pool.query("SELECT c.*,COUNT(j.id) current_hiring FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='USA' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) WHERE c.id=? GROUP BY c.id",[req.params.id]);if(!rows[0])return res.status(404).json({error:"Company not found"});res.json({company:rows[0]})});
+app.get("/api/companies/:id/jobs",async(req,res)=>{const [jobs]=await pool.query("SELECT j.*,c.name company,c.industry FROM jobs j JOIN companies c ON c.id=j.company_id WHERE j.company_id=? AND j.is_active=1 AND j.country='USA' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) ORDER BY COALESCE(j.posted_at,j.first_seen_at) DESC",[req.params.id]);jobs.forEach(j=>{try{j.skills=JSON.parse(j.skills_json||"[]")}catch{j.skills=[]}delete j.skills_json});res.json({jobs})});
 app.get("/api/bot/answer",async(req,res)=>{try{res.json({answer:await websiteAnswer(req.query?.q||"")})}catch(e){res.status(500).json({error:e.message})}});
 app.post("/api/bot/answer",async(req,res)=>{try{res.json({answer:await websiteAnswer(req.body?.question)})}catch(e){res.status(500).json({error:e.message})}});
-app.get("/api/industries",async(req,res)=>{const [rows]=await pool.query("SELECT c.industry,COUNT(j.id) current_jobs FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='United States' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) GROUP BY c.industry ORDER BY current_jobs DESC");res.json({industries:rows})});
+app.get("/api/industries",async(req,res)=>{const [rows]=await pool.query("SELECT c.industry,COUNT(j.id) current_jobs FROM companies c LEFT JOIN jobs j ON j.company_id=c.id AND j.is_active=1 AND j.country='USA' AND j.expires_at>NOW() AND COALESCE(j.posted_at,j.first_seen_at)>=DATE_SUB(NOW(),INTERVAL 30 DAY) GROUP BY c.industry ORDER BY current_jobs DESC");res.json({industries:rows})});
 
 app.post("/api/auth/register",async(req,res)=>{try{const{name="",email,password,whatsappNumber="",country="USA"}=req.body||{};if(!email||!password)return res.status(400).json({error:"Email and password are required"});const hash=await bcrypt.hash(password,12);const phone=normalizePhone(whatsappNumber);const [r]=await pool.query("INSERT INTO users(name,email,password_hash,whatsapp_number,country) VALUES(?,?,?,?,?)",[name,email.toLowerCase(),hash,phone||null,normalizeCountry(country)]);res.json({token:tokenFor({type:"user",id:r.insertId}),user:{id:r.insertId,name,email,country:normalizeCountry(country),whatsapp_number:phone}})}catch(e){res.status(400).json({error:e.code==="ER_DUP_ENTRY"?"Email already registered":e.message})}});
 app.post("/api/auth/login",async(req,res)=>{const [rows]=await pool.query("SELECT * FROM users WHERE email=? LIMIT 1",[String(req.body?.email||"").toLowerCase()]);if(!rows[0]||!rows[0].password_hash||!(await bcrypt.compare(String(req.body?.password||""),rows[0].password_hash)))return res.status(401).json({error:"Invalid email or password"});res.json({token:tokenFor({type:"user",id:rows[0].id}),user:{id:rows[0].id,name:rows[0].name,email:rows[0].email,country:rows[0].country,whatsapp_number:rows[0].whatsapp_number,whatsapp_opt_in:rows[0].whatsapp_opt_in,plan:rows[0].plan,grant_until:rows[0].grant_until}})});
@@ -201,7 +201,34 @@ app.delete("/api/alerts/:id",userAuth,async(req,res)=>{await pool.query("UPDATE 
 app.post("/api/billing/checkout",userAuth,async(req,res)=>{try{const [u]=await pool.query("SELECT email FROM users WHERE id=?",[req.user.id]);const s=await createCheckout({userId:req.user.id,email:u[0]?.email});res.json({url:s.url})}catch(e){res.status(400).json({error:e.message})}});
 
 app.post("/api/admin/login",async(req,res)=>{const [rows]=await pool.query("SELECT * FROM admin_users WHERE email=? LIMIT 1",[String(req.body?.email||"").toLowerCase()]);if(!rows[0]||!(await bcrypt.compare(String(req.body?.password||""),rows[0].password_hash)))return res.status(401).json({error:"Invalid admin credentials"});res.json({token:tokenFor({type:"admin",id:rows[0].id,email:rows[0].email})})});
-app.get("/api/admin/dashboard",adminAuth,async(req,res)=>{const [[stats]]=await pool.query("SELECT (SELECT COUNT(*) FROM jobs WHERE is_active=1 AND country='United States') jobs,(SELECT COUNT(*) FROM companies) companies,(SELECT COUNT(*) FROM career_sources WHERE status='active') sources,(SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM job_alerts WHERE active=1) alerts");const [recent]=await pool.query("SELECT ar.id,c.name company,ar.found_count,ar.imported_count,ar.status,ar.started_at,ar.message FROM agent_runs ar LEFT JOIN career_sources s ON s.id=ar.source_id LEFT JOIN companies c ON c.id=s.company_id ORDER BY ar.id DESC LIMIT 20");res.json({stats,recent})});
+app.get("/api/admin/dashboard",adminAuth,async(req,res)=>{const [[stats]]=await pool.query("SELECT (SELECT COUNT(*) FROM jobs WHERE is_active=1 AND country='USA') jobs,(SELECT COUNT(*) FROM companies) companies,(SELECT COUNT(*) FROM career_sources WHERE status='active') sources,(SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM job_alerts WHERE active=1) alerts");const [recent]=await pool.query("SELECT ar.id,c.name company,ar.found_count,ar.imported_count,ar.status,ar.started_at,ar.message FROM agent_runs ar LEFT JOIN career_sources s ON s.id=ar.source_id LEFT JOIN companies c ON c.id=s.company_id ORDER BY ar.id DESC LIMIT 20");res.json({stats,recent})});
+app.get("/api/admin/jobs",adminAuth,async(req,res)=>{
+ const [rows]=await pool.query(`SELECT j.id,j.title,j.country,j.location,j.category,j.experience_level,j.is_active,j.posted_at,j.first_seen_at,j.apply_url,c.name company,s.source_url,s.status source_status
+ FROM jobs j JOIN companies c ON c.id=j.company_id LEFT JOIN career_sources s ON s.id=j.source_id
+ ORDER BY j.id DESC LIMIT 500`);
+ res.json({jobs:rows});
+});
+app.get("/api/admin/countries",adminAuth,async(req,res)=>{
+ const [rows]=await pool.query(`SELECT country,COUNT(*) total_jobs,SUM(is_active=1) active_jobs,COUNT(DISTINCT company_id) companies
+ FROM jobs GROUP BY country ORDER BY active_jobs DESC,country`);
+ res.json({countries:rows});
+});
+app.get("/api/admin/companies",adminAuth,async(req,res)=>{
+ const [rows]=await pool.query(`SELECT c.id,c.name,c.country,c.industry,c.career_url,COUNT(j.id) total_jobs,SUM(j.is_active=1) active_jobs,COUNT(DISTINCT s.id) sources
+ FROM companies c LEFT JOIN jobs j ON j.company_id=c.id LEFT JOIN career_sources s ON s.company_id=c.id
+ GROUP BY c.id ORDER BY active_jobs DESC,c.name LIMIT 500`);
+ res.json({companies:rows});
+});
+app.get("/api/admin/runs",adminAuth,async(req,res)=>{
+ const [rows]=await pool.query(`SELECT ar.id,ar.source_id,ar.started_at,ar.finished_at,ar.status,ar.found_count,ar.imported_count,ar.message,c.name company,s.country,s.source_url
+ FROM agent_runs ar LEFT JOIN career_sources s ON s.id=ar.source_id LEFT JOIN companies c ON c.id=s.company_id
+ ORDER BY ar.id DESC LIMIT 500`);
+ res.json({runs:rows});
+});
+app.get("/api/admin/subscriptions",adminAuth,async(req,res)=>{
+ const [rows]=await pool.query(`SELECT s.*,u.email,u.name,u.country FROM subscriptions s JOIN users u ON u.id=s.user_id ORDER BY s.id DESC LIMIT 500`);
+ res.json({subscriptions:rows});
+});
 app.get("/api/admin/sources",adminAuth,async(req,res)=>{const [rows]=await pool.query("SELECT s.id,s.company_id,c.name company,c.industry,s.country,s.source_url,s.source_type,s.status,s.last_checked_at,s.last_success_at,s.last_sync_found,s.last_sync_imported,s.last_error,s.discovered_ats FROM career_sources s JOIN companies c ON c.id=s.company_id ORDER BY c.name");res.json({sources:rows})});
 app.post("/api/admin/sources",adminAuth,async(req,res)=>{try{const{name,companyName,url,careerUrl,industry="Other",country="USA"}=req.body||{};const company=name||companyName;const sourceUrl=url||careerUrl;if(!company||!sourceUrl)return res.status(400).json({error:"Company and career URL are required"});const id=await upsertSource(company,sourceUrl,industry,normalizeCountry(country));res.json({ok:true,id,message:"Career Agent source added. It will be scanned automatically every 5 minutes."})}catch(e){res.status(400).json({error:e.message})}});
 app.post("/api/admin/sources/:id/scan",adminAuth,async(req,res)=>{try{res.json(await scanSource(req.params.id))}catch(e){res.status(400).json({error:e.message})}});
