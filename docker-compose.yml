@@ -1,0 +1,20 @@
+services:
+  frontend:
+    image: ghcr.io/dineshyadav1507/talent-inspirations-frontend:latest
+    container_name: talent-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      - api
+
+  api:
+    image: ghcr.io/dineshyadav1507/talent-inspirations-api:latest
+    container_name: talent-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
