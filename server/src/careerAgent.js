@@ -75,7 +75,7 @@ function jsonLdJobs(html){
     for(const j of nodes){
      if(j?.["@type"]!=="JobPosting"||!j.title||!j.url)continue;
      const addr=j.jobLocation?.address||{};
-     const location=[addr.addressLocality,addr.addressRegion,addr.addressCountry].filter(Boolean).join(", ")||j.jobLocationType||"";
+     const location=[addr.addressLocality,addr.addressRegion,addr.addressCountry].filter(Boolean).join(", ")||j.jobLocationType||j.applicantLocationRequirements?.[0]?.name||"";
      out.push({externalJobId:String(j.identifier?.value||j.identifier||j.url),title:String(j.title),description:cleanHtml(j.description||""),location,applyUrl:String(j.url),postedAt:parseDate(j.datePosted),employmentType:j.employmentType||"",locationType:/telecommute|remote/i.test(String(j.jobLocationType||""))?"remote":"unknown"});
     }
    }
@@ -129,7 +129,7 @@ async function workday(url){
     const path=String(p.externalPath||"");if(!path||seen.has(path))continue;
     const loc=String(p.locationsText||"");if(!isUSA(loc,p.title||""))continue;
     seen.add(path);const posted=parseDate(p.postedOn||p.postedDate);if(!posted&&/days?\s+ago/i.test(String(p.postedOn||"")))continue;
-    out.push({externalJobId:path,title:p.title||"",description:cleanHtml((p.bulletFields||[]).join(" ")),location:loc,applyUrl:new URL("/"+locale+"/"+site+(path.startsWith("/")?path:"/"+path),u.origin).toString(),postedAt:posted,locationType:/remote/i.test(loc)?"remote":"unknown"});
+    out.push({externalJobId:path,title:p.title||"",description:cleanHtml(p.jobPostingInfo?.jobDescription||p.jobDescription||p.description||((p.bulletFields||[]).join(" "))),location:loc,applyUrl:new URL("/"+locale+"/"+site+(path.startsWith("/")?path:"/"+path),u.origin).toString(),postedAt:posted,locationType:/remote/i.test(loc)?"remote":"unknown"});
    }
    if(posts.length<20)break;
   }
@@ -164,7 +164,7 @@ async function fetchOne(url){
 export async function scanCareerPage(url,country="USA"){
  const result=await fetchOne(url);
  const now=new Date();
- return result.jobs.map(j=>{
+ const output=result.jobs.map(j=>{
   const published=j.postedAt instanceof Date?j.postedAt:parseDate(j.postedAt);
   const date=published||now;
   const text=[j.title,j.description,j.location].join(" ");
@@ -183,5 +183,7 @@ export async function scanCareerPage(url,country="USA"){
    skills:skills(text)
   };
  }).filter(j=>j.title&&j.applyUrl&&isSupportedLocation(j.location,j.description,country));
+ output.ats=result.ats||"generic";
+ return output;
 }
 export {isSupportedLocation};
