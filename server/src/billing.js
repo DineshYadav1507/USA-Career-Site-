@@ -15,12 +15,12 @@ export async function createCheckout({userId,email,planCode="pro_31"}){
  if(!priceId)throw new Error(`Stripe price is not configured for ${plan.name}`);
  const base=process.env.PUBLIC_WEB_URL||"http://localhost:5173";
  const session=await s.checkout.sessions.create({
-  mode:"subscription",customer_email:email||undefined,client_reference_id:String(userId),
+  mode:"payment",customer_email:email||undefined,client_reference_id:String(userId),
   line_items:[{price:priceId,quantity:1}],
   success_url:`${base}/account?payment=success&plan=${encodeURIComponent(plan.code)}`,
   cancel_url:`${base}/account?payment=cancelled`,
   metadata:{user_id:String(userId),plan_code:plan.code,duration_days:String(plan.durationDays)},
-  subscription_data:{metadata:{user_id:String(userId),plan_code:plan.code,duration_days:String(plan.durationDays)}}
+  metadata:{user_id:String(userId),plan_code:plan.code,duration_days:String(plan.durationDays)}
  });
  return session;
 }
