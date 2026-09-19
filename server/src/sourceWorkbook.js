@@ -9,7 +9,9 @@ export async function importCareerWorkbook(buffer,{adminId,fileName="uploaded-wo
   const name=pick(row,["company","companyname","employer","name"]);
   const url=pick(row,["careerurl","careersurl","careerpage","careers","url","joburl","website"]);
   const industry=pick(row,["industry","sector"])||"Other";
-  const rawCountry=pick(row,["country","market","region"])||"USA";\n  const countryMap={"US":"USA","USA":"USA","United States":"USA","United States of America":"USA","UK":"UK","United Kingdom":"UK","Canada":"Canada","Australia":"Australia","Germany":"Germany","Netherlands":"Netherlands","Ireland":"Ireland","France":"France","Japan":"Japan","Singapore":"Singapore","UAE":"UAE","United Arab Emirates":"UAE","Saudi Arabia":"Saudi Arabia","New Zealand":"New Zealand","Switzerland":"Switzerland","Sweden":"Sweden","Norway":"Norway","Denmark":"Denmark","Finland":"Finland","Belgium":"Belgium","Austria":"Austria"};\n  const country=countryMap[rawCountry]||rawCountry;
+  const rawCountry=pick(row,["country","market","region"])||"USA";
+  const countryMap={"US":"USA","USA":"USA","United States":"USA","United States of America":"USA","UK":"UK","United Kingdom":"UK","Canada":"Canada","Australia":"Australia","Germany":"Germany","Netherlands":"Netherlands","Ireland":"Ireland","France":"France","Japan":"Japan","Singapore":"Singapore","UAE":"UAE","United Arab Emirates":"UAE","Saudi Arabia":"Saudi Arabia","New Zealand":"New Zealand","Switzerland":"Switzerland","Sweden":"Sweden","Norway":"Norway","Denmark":"Denmark","Finland":"Finland","Belgium":"Belgium","Austria":"Austria"};
+  const country=countryMap[rawCountry]||rawCountry;
   if(!name||!/^https?:\/\//i.test(url)){errors++;continue}
   const key=name.toLowerCase()+"|"+url.toLowerCase();if(seen.has(key))continue;seen.add(key);
   try{const sourceId=await upsertSource(name,url,industry,country);sourceCount++;companyCount++;imported++;row.__sourceId=sourceId;}catch{errors++}
