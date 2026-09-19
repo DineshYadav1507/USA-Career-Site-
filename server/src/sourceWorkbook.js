@@ -12,11 +12,11 @@ export async function importCareerWorkbook(buffer,{adminId,pool,upsertSource,sca
   const country=pick(row,["country","market","region"])||"USA";
   if(!name||!/^https?:\/\//i.test(url)){errors++;continue}
   const key=name.toLowerCase()+"|"+url.toLowerCase();if(seen.has(key))continue;seen.add(key);
-  try{await upsertSource(name,url,industry,country);sourceCount++;companyCount++;imported++;}catch{errors++}
+  try{const sourceId=await upsertSource(name,url,industry,country);sourceCount++;companyCount++;imported++;row.__sourceId=sourceId;}catch{errors++}
  }
  const [r]=await pool.query("INSERT INTO source_imports(admin_id,file_name,company_count,source_count,imported_count,error_count) VALUES(?,?,?,?,?,?)",[adminId,"uploaded-workbook.xlsx",companyCount,sourceCount,imported,errors]);
- const [sources]=await pool.query("SELECT id FROM career_sources WHERE id IN (SELECT MAX(id) FROM career_sources GROUP BY source_url)");
  const scanResults=[];
- for(const s of sources.slice(0,100)){try{scanResults.push(await scanSource(s.id))}catch(e){scanResults.push({sourceId:s.id,error:e.message})}}
+ const importedIds=[...new Set(rows.map(r=>r.__sourceId).filter(Boolean))].slice(0,100);
+ for(const sourceId of importedIds){try{scanResults.push(await scanSource(sourceId))}catch(e){scanResults.push({sourceId,error:e.message})}}
  return {importId:r.insertId,rows:rows.length,companyCount,sourceCount,imported,errors,scanned:scanResults.length,scanResults};
 }
